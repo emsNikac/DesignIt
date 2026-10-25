@@ -1,3 +1,5 @@
+import { EXTRA_ITEMS } from './collection.js';
+
 export const CATEGORIES = [
   { id: 'all', name: 'All items' }, { id: 'seating', name: 'Seating' },
   { id: 'tables', name: 'Tables' }, { id: 'storage', name: 'Storage' },
@@ -59,6 +61,7 @@ export const CATALOG = [
   item('vanity', 'Float bathroom vanity', 'bathroom', 'vanity', '#af8a61', [.95, .85, .5], { finish: 'Oak & ceramic' }),
   item('shower', 'Rain walk-in shower', 'bathroom', 'shower', '#b2a68f', [.95, 2.15, .95], { finish: 'Glass & brass' }),
   item('towelrack', 'Everyday towel rail', 'bathroom', 'towelrack', '#9e927b', [.6, .9, .3], { finish: 'Brass & cotton' }),
+  ...EXTRA_ITEMS,
 ];
 
 export const SWATCHES = ['#7c8060', '#dfd3bd', '#e4dac9', '#ad674b', '#53595a', '#8d9a9d', '#bba38d', '#634832', '#d4c3a2', '#464b3d'];

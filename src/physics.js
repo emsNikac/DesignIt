@@ -18,16 +18,26 @@ export function createWorld(width, depth, partitions) {
 }
 
 export function createBody(def, item) {
-  if(def.rug || def.ceiling || def.wall) return null;
+  if(def.rug || def.ceiling || (def.wall&&!def.wallSupport)) return null;
   const s=item.scale;
   const body = new CANNON.Body({mass:def.small?.4:0,allowSleep:true,sleepSpeedLimit:.08,sleepTimeLimit:.7,linearDamping:.6,angularDamping:.8});
   const add=(w,h,d,x=0,y=h/2,z=0)=>body.addShape(new CANNON.Box(new CANNON.Vec3(w*s/2,h*s/2,d*s/2)),new CANNON.Vec3(x*s,y*s,z*s));
-  if(def.model==='shelf') {
+  if(def.model==='wall-shelf'){
+    const[w,h,d]=def.size;add(w,.035,d,0,h-.0175);
+  }else if(def.model==='shelf') {
     for(const x of [-.77,0,.77])add(.055,2,.36,x,1);
     for(let i=0;i<5;i++)add(1.6,.045,.36,0,.43+i*.46);
     for(const x of [-.67,.67])add(.08,.41,.3,x,.205);
-  }else if(['coffee','dining','desk','side'].includes(def.model)){
+  }else if(['open-shelf','ladder-shelf','cube-shelf','shoe-rack','glass-cabinet'].includes(def.model)){
+    const[w,h,d]=def.size;
+    const levels=def.model==='shoe-rack'?2:def.model==='cube-shelf'?3:def.model==='ladder-shelf'?5:def.model==='glass-cabinet'?3:Math.max(2,Math.round(h/.4));
+    for(const x of [-w/2+.025,w/2-.025])add(.05,h,d,x,h/2);
+    for(let i=0;i<=levels;i++)add(w,.035,d,0,.025+i*(h-.05)/levels);
+    if(def.model==='cube-shelf')for(const x of [-w/6,w/6])add(.035,h,d,x,h/2);
+  }else if(['coffee','dining','desk','side','rect-table','trestle','glass-table','bistro','c-table'].includes(def.model)){
     const[w,h,d]=def.size;add(w,.065,d,0,h-.0325);add(w*.35,h-.065,d*.35,0,(h-.065)/2);
+  }else if(def.model==='nesting'){
+    add(.67,.04,.65,-.23,.48);add(.53,.04,.53,.32,.35);add(.15,.46,.15,-.23,.23);add(.12,.33,.12,.32,.165);
   }else if(def.model==='island'||def.model==='kitchen') {
     const[w,h,d]=def.size;add(w,h,d);
   }else if(def.model==='shower') {add(.95,.065,.95);add(.025,2.1,.95,-.47,1.1);add(.95,2.1,.025,0,1.1,-.47);}

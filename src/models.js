@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { buildCollectionModel } from './collection-models.js';
 
 const materials = new Map();
 const textures = new Map();
@@ -228,13 +229,17 @@ export function createModel(def, overrideColor) {
       box(g,.9,1.15,.06,0,.575,0,wood,.008);box(g,.82,1.07,.012,0,.575,.035,material('#e7dfcc'),0);
       ball(g,-.12,.68,.05,.2,.25,.006,material(color));box(g,.25,.5,.008,.16,.4,.05,material('#797e64'),.002);ball(g,.12,.82,.06,.16,.16,.006,material('#c5a57b'));break;
     }
-    case 'rug': case 'roundrug':{
+    case 'rug': case 'roundrug': case 'oval-rug':{
       const m=new C.MeshStandardMaterial({map:makeTexture('rug',color),roughness:1,bumpMap:makeTexture('rug',color),bumpScale:.02});
       if(def.model==='rug'){
         box(g,3.1,.025,2.2,0,.018,0,m,.01);
         for(const side of [-1,1])for(let i=0;i<70;i++)box(g,.075,.012,.009,side*1.58,.016,-1.07+i*.031,material(color,'cloth'),0);
-        if(def.pattern)for(let i=-2;i<=2;i++){const line=box(g,.6,.001,.015,i*.55,.033,0,material('#d6c6a7'),0);line.rotation.y=Math.PI/4;}
-      }else cyl(g,1,1,.025,0,.018,0,m,64);
+        const accent=material('#e1d5bd','cloth');
+        if(def.pattern==='stripes')for(let i=-4;i<=4;i++)box(g,.06,.002,2.1,i*.32,.033,0,accent,0);
+        else if(def.pattern==='checker')for(let x=0;x<8;x++)for(let z=0;z<6;z++)if((x+z)%2===0)box(g,.365,.002,.345,-1.3+x*.37,.033,-.88+z*.35,accent,0);
+        else if(def.pattern==='shag')for(let x=0;x<26;x++)for(let z=0;z<18;z++)box(g,.09,.025,.09,-1.46+x*.115,.038,-1.02+z*.12,accent,.02);
+        else if(def.pattern)for(let i=-2;i<=2;i++)for(const sign of [-1,1]){const line=box(g,.72,.002,.018,i*.52,.033,sign*.24,accent,0);line.rotation.y=sign*Math.PI/4;}
+      }else {const r=cyl(g,1,1,.025,0,.018,0,m,64);if(def.model==='oval-rug')r.scale.z=.65;}
       break;
     }
     case 'kitchen':{
@@ -273,7 +278,7 @@ export function createModel(def, overrideColor) {
       box(g,.4,.41,.18,0,.59,-.23,white,.06);box(g,.42,.04,.2,0,.81,-.23,white,.025);cyl(g,.025,.025,.012,.1,.837,-.23,metal);break;
     }
     case 'bath':{
-      const outer=ball(g,0,.32,0,.825,.3,.39,white);
+      const outer=ball(g,0,.32,0,.825,.3,.39,material(color,'ceramic'));
       const inner=ball(g,0,.49,0,.71,.12,.31,material('#d3d9cf','ceramic'));
       const rim=new C.Shape();rim.absellipse(0,0,.8,.37,0,Math.PI*2,false,0);const hole=new C.Path();hole.absellipse(0,0,.71,.29,0,Math.PI*2,true,0);rim.holes.push(hole);
       mesh(g,new C.ExtrudeGeometry(rim,{depth:.035,bevelEnabled:true,bevelSize:.015,bevelThickness:.015,bevelSegments:2,steps:1}),white,0,.56,0,Math.PI/2);
@@ -291,7 +296,13 @@ export function createModel(def, overrideColor) {
       for(const x of [-.28,.28]){tube(g,[x,0,-.12],[x,.9,-.12],.014,metal);tube(g,[x,0,.12],[x,.9,-.12],.012,metal);}tube(g,[-.28,.89,-.12],[.28,.89,-.12],.014,metal);
       box(g,.4,.53,.025,0,.6,-.1,material('#ddd2bb','cloth'),.01);for(let i=0;i<14;i++)box(g,.008,.5,.027,-.18+i*.028,.6,-.085,material('#e6ddc8','cloth'),.003);break;
     }
-    default:box(g,...def.size,0,def.size[1]/2,0,body);
+    default:if(!buildCollectionModel(g,def,{box,cyl,ball,tube,torus,legs,material,mesh,createModel,color}))throw new Error(`Unknown furniture model: ${def.model}`);
+  }
+  if(def.fit){
+    const bounds=new C.Box3().setFromObject(g),size=bounds.getSize(new C.Vector3()),center=bounds.getCenter(new C.Vector3());
+    const scale=new C.Vector3(...def.size).divide(size);g.scale.copy(scale);
+    g.position.set(-center.x*scale.x,-bounds.min.y*scale.y,-center.z*scale.z);
+    const fitted=new C.Group();fitted.add(g);fitted.userData.definition=def;return fitted;
   }
   g.userData.definition=def;
   return g;

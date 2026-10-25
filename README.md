@@ -13,16 +13,18 @@ npm run dev
 
 Press `Ctrl+C` in the terminal to stop the server and close its port.
 
-`npm run build` creates a static production build in `dist/`. `npm test` checks support physics, furniture collisions and saved-file validation.
+`npm run build` creates a static production build in `dist/`. `npm test` checks every furniture model, support physics, saved-design migration and camera movement.
 
 ## In the studio
 
-- Browse 51 furniture, kitchen, bedroom, bathroom, lighting and decorative items. Click to add; drag to place.
+- Browse 178 furniture, kitchen, bedroom, bathroom, lighting and decorative items, including sectionals, rocking chairs, appliances, curtains, patterned rugs and bathroom accessories. Click to add; drag to place.
 - Select an object to edit its color, rotation, size or position. Small objects have gravity and snap onto upward-facing surfaces. Tables and bookcases use compound colliders with open spaces.
-- Choose one of four flat layouts. Each layout saves separately in browser storage.
+- Choose **New design**, pick one of four empty floor plans and name your design. Create multiple independent designs using the same flat layout.
+- Open the furnished homes from **My spaces → Demo homes**. Edits create a personal copy; the original demos stay available. Older per-layout saves migrate into **Your designs** automatically.
 - Change wall paint, floor finishes and bathroom tiles. Bathroom tile finishes apply to the two divided layouts.
 - Change time from midnight through daylight and sunset. Direct sunlight, shadows, ambient light and reflection intensity respond to time.
-- Switch between an orbit camera, a top-down plan and a first-person walkthrough. Use WASD to move and drag or arrow keys to turn.
+- Switch between an orbit camera, a top-down plan and a first-person walkthrough. In Walkthrough, the mouse looks around freely, WASD moves, Shift walks faster and Esc releases the cursor and pauses movement. Click the room to resume. Looking up and down is supported; diagonal movement stays at the same walking speed.
+- Browsers supporting the Pointer Lock API capture the cursor for continuous turning. If capture is unavailable (including some embedded preview browsers), choose **Use mouse-look** to look around by moving the mouse over the room. Touch screens retain drag-to-look controls.
 - Export the current view as PNG. Save and import portable JSON designs.
 
 Keyboard shortcuts: `V` select, `M` move, `R` rotate 15°, `Delete` remove, `⌘/Ctrl D` duplicate, `⌘/Ctrl Z` undo, `⌘/Ctrl Shift Z` redo, `Escape` deselect.
