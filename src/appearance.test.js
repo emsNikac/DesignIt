@@ -79,3 +79,9 @@ test('graphics preferences round-trip and corrupt settings use safe defaults',()
   assert.equal(normalizeGraphics({pixelRatio:1000,shadows:-1}).pixelRatio,1.75);
   assert.equal(loadGraphics({getItem:()=>'{broken'}).preset,'original');
 });
+test('anti-aliasing settings persist and older saved presets receive suitable defaults',()=>{
+  for(const antialias of ['off','fxaa','smaa'])assert.equal(loadGraphics({getItem:()=>JSON.stringify({...DEFAULT_GRAPHICS,antialias})}).antialias,antialias);
+  assert.equal(normalizeGraphics({preset:'battery'}).antialias,'off');
+  assert.equal(normalizeGraphics({preset:'original'}).antialias,'smaa');
+  assert.equal(normalizeGraphics({antialias:'unsupported'}).antialias,'smaa');
+});

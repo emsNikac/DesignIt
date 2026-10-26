@@ -2,6 +2,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { buildCollectionModel } from './collection-models.js';
 import { buildHobbyModel } from './hobby-models.js';
+import { buildHomeModel } from './home-models.js';
+import { drawFloorPattern } from './floors.js';
 import { makeSurface, collectParts } from './appearance.js';
 import { sharedGeometry, batchModel } from './mesh-optimizer.js';
 
@@ -52,6 +54,8 @@ export function makeTexture(type = 'wood', color = '#b8966d') {
   } else if (type === 'terrazzo') {
     const chips=['#ad9c87','#ebe4d4','#8a8c7e','#c8a28b','#b5b3a2'];
     for(let i=0;i<2300;i++){const x=random()*512,y=random()*512,r=1+random()*5;ctx.fillStyle=chips[i%chips.length];ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+r,y-r*.5);ctx.lineTo(x+r*.7,y+r);ctx.lineTo(x-r*.5,y+r*.4);ctx.fill();}
+  } else if (drawFloorPattern(ctx,type,random)) {
+    // Additional floor materials draw onto the same pooled procedural textures.
   } else if (type === 'marble') {
     for(let i=0;i<12;i++){ctx.beginPath();const y=random()*512;ctx.moveTo(0,y);ctx.bezierCurveTo(140,y+random()*150,300,y-random()*160,512,y+random()*100);ctx.strokeStyle=`rgba(115,108,93,${.06+random()*.12})`;ctx.lineWidth=random()*2;ctx.stroke();}
   }
@@ -311,7 +315,7 @@ export function createModel(def, overrideColor, appearance={}, pattern, optimize
       for(const x of [-.28,.28]){tube(g,[x,0,-.12],[x,.9,-.12],.014,metal);tube(g,[x,0,.12],[x,.9,-.12],.012,metal);}tube(g,[-.28,.89,-.12],[.28,.89,-.12],.014,metal);
       box(g,.4,.53,.025,0,.6,-.1,material('#ddd2bb','cloth'),.01);for(let i=0;i<14;i++)box(g,.008,.5,.027,-.18+i*.028,.6,-.085,material('#e6ddc8','cloth'),.003);break;
     }
-    default:{const helpers={box,cyl,ball,tube,torus,legs,material,mesh,createModel:(nested,c)=>createModel(nested,c,appearance,undefined,false),part,color};if(!buildCollectionModel(g,def,helpers)&&!buildHobbyModel(g,def,helpers))throw new Error(`Unknown furniture model: ${def.model}`);}
+    default:{const helpers={box,cyl,ball,tube,torus,legs,material,mesh,createModel:(nested,c)=>createModel(nested,c,appearance,undefined,false),part,color};if(!buildCollectionModel(g,def,helpers)&&!buildHobbyModel(g,def,helpers)&&!buildHomeModel(g,def,helpers))throw new Error(`Unknown furniture model: ${def.model}`);}
   }
   const parts=collectParts(g,def);
   if(optimize)batchModel(g);

@@ -9,6 +9,9 @@ import { createModel, material, makeTexture, primitives } from './models.js';
 import { disposeOwnedGeometry } from './mesh-optimizer.js';
 import { appearanceKey } from './appearance.js';
 import {DEFAULT_GRAPHICS,normalizeGraphics} from './graphics.js';
+import {createAntialiasing} from './antialiasing.js';
+import {itemDefinition,blocksWallWalk} from './architecture.js';
+import {floorSurface,floorTextureType} from './floors.js';
 import { CATALOG, LAYOUTS, FLOOR_TYPES } from './catalog.js';
 import { createWorld, createBody, canPlaceBody } from './physics.js';
 import { applyMouseLook, walkingDirection } from './walk-controls.js';
@@ -16,7 +19,7 @@ import { applyMouseLook, walkingDirection } from './walk-controls.js';
 const {box,cyl}=primitives;
 export class DesignScene {
   constructor(container, callbacks, graphics=DEFAULT_GRAPHICS) {
-    this.container=container;this.callbacks=callbacks;this.objects=new Map();this.keys=new Set();this.mode='select';this.view='orbit';this.snap=true;this.wallVisible=true;this.disposed=false;this.dirty=true;this.shadowDirty=true;this.lastRender=0;this.frameLimit=60;
+    this.container=container;this.callbacks=callbacks;this.objects=new Map();this.keys=new Set();this.mode='navigate';this.view='orbit';this.snap=true;this.wallVisible=true;this.disposed=false;this.dirty=true;this.shadowDirty=true;this.lastRender=0;this.frameLimit=60;
     this.scene=new THREE.Scene();this.scene.background=new THREE.Color('#eeeee7');
     this.renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true,alpha:false,powerPreference:'high-performance'});
     this.graphics=normalizeGraphics(graphics);
@@ -37,7 +40,7 @@ export class DesignScene {
     this.grid=new THREE.GridHelper(30,60,'#999f86','#c7cbbb');this.grid.position.y=.008;this.grid.visible=false;this.grid.material.transparent=true;this.grid.material.opacity=.24;this.scene.add(this.grid);
     this.composer=new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene,this.camera));
-    this.ao=null;this.composer.addPass(new OutputPass());
+    this.ao=null;this.antialiasPass=null;this.outputPass=new OutputPass();this.composer.addPass(this.outputPass);
     this.applyGraphics(this.graphics);
     this.bindings=[];this.listen(this.controls,'change',()=>this.invalidate());
     this.walkLook={yaw:0,pitch:0};this.lookState='paused';
@@ -49,7 +52,7 @@ export class DesignScene {
     this.listen(document,'pointerlockerror',()=>{if(this.view==='walk')this.setLookState('fallback');});
     this.listen(document,'mousemove',e=>{if(this.view==='walk'&&document.pointerLockElement===this.renderer.domElement)this.lookAround(e.movementX,e.movementY);});
     this.listen(this.renderer.domElement,'pointerdown',this.pointerDown.bind(this),true);
-    this.listen(window,'pointermove',this.pointerMove.bind(this));this.listen(window,'pointerup',this.pointerUp.bind(this));
+    this.listen(window,'pointermove',this.pointerMove.bind(this));this.listen(window,'pointerup',this.pointerUp.bind(this));this.listen(window,'pointercancel',()=>this.pointerUp());
     this.listen(window,'keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable)return;if(this.view==='walk'&&['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright',' '].includes(e.key.toLowerCase()))e.preventDefault();this.keys.add(e.key.toLowerCase());});this.listen(window,'keyup',e=>this.keys.delete(e.key.toLowerCase()));this.listen(window,'blur',()=>{this.releaseMouse();this.pointerUp();});
     this.listen(document,'visibilitychange',()=>{if(document.hidden)this.releaseMouse();});
     this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(container);this.resize();
@@ -67,6 +70,11 @@ export class DesignScene {
     if(settings.ao&&!this.ao){this.ao=new GTAOPass(this.scene,this.camera,512,512);this.ao.blendIntensity=.85;this.composer.insertPass(this.ao,1);}
     if(!settings.ao&&this.ao){this.composer.removePass(this.ao);this.ao.dispose();this.ao=null;}
     this.ao?.updateGtaoMaterial({radius:.32,distanceExponent:1.5,thickness:.7,samples:settings.aoSamples});
+    if(this.antialiasMode!==settings.antialias){
+      if(this.antialiasPass){this.composer.removePass(this.antialiasPass);this.antialiasPass.dispose();}
+      this.antialiasMode=settings.antialias;this.antialiasPass=createAntialiasing(settings.antialias,()=>this.invalidate());
+      if(this.antialiasPass){const outputIndex=this.composer.passes.indexOf(this.outputPass);this.composer.insertPass(this.antialiasPass,outputIndex+(settings.antialias==='fxaa'?1:0));}
+    }
     this.resize();this.invalidate(true);
   }
   getAppearanceParts(uid){return this.objects.get(uid)?.group.userData.appearanceParts||[];}
@@ -76,9 +84,9 @@ export class DesignScene {
     this.room=new THREE.Group();this.scene.add(this.room);this.walls=[];
     const{width:w,depth:d}=layout;
     const slab=material('#c9c3b4');box(this.room,w+.26,.23,d+.26,0,-.13,0,slab,.035);
-    const f=FLOOR_TYPES.find(f=>f.id===floorType)||FLOOR_TYPES[0];const texture=makeTexture(f.type==='wood'?'floor':f.type,f.color);
+    const f=FLOOR_TYPES.find(f=>f.id===floorType)||FLOOR_TYPES[0];const texture=makeTexture(floorTextureType(f),f.color);
     const floortex=texture.clone();floortex.repeat.set(w/5,d/5);floortex.needsUpdate=true;
-    const floorMat=new THREE.MeshStandardMaterial({map:floortex,roughness:f.type==='wood'?.52:.68,bumpMap:floortex,bumpScale:.012});
+    const floorMat=new THREE.MeshStandardMaterial({map:floortex,bumpMap:floortex,...floorSurface(f)});
     const floor=new THREE.Mesh(new THREE.PlaneGeometry(w,d),floorMat);floor.rotation.x=-Math.PI/2;floor.receiveShadow=true;floor.position.y=.002;floor.userData.ownedMaterial=true;this.room.add(floor);
     const wall=material(wallColor),trim=material('#eeeade');
     const addWall=(width,height,depth,x,y,z)=>{const m=box(this.room,width,height,depth,x,y,z,wall,.008);this.walls.push(m);return m;};
@@ -134,11 +142,12 @@ export class DesignScene {
     const wanted=new Set(design.items.map(i=>i.uid));
     for(const[id,o]of this.objects)if(!wanted.has(id)){if(!o.def.small)supportMoved=true;this.removeObject(o);this.objects.delete(id);}
     for(const item of design.items){
-      const def=CATALOG.find(c=>c.id===item.catalogId);let o=this.objects.get(item.uid);
-      const signature=`${item.catalogId}-${item.scale}-${appearanceKey(item)}`;
+      const def=itemDefinition(CATALOG.find(c=>c.id===item.catalogId),item);let o=this.objects.get(item.uid);
+      const shapeSignature=JSON.stringify([item.catalogId,item.scale,item.dimensions]);
+      const signature=`${shapeSignature}-${appearanceKey(item)}`;
       const makeGroup=()=>{const group=createModel(def,item.color,item.appearance,item.pattern);group.scale.setScalar(item.scale);group.userData.uid=item.uid;group.traverse(child=>child.userData.uid=item.uid);return group;};
       if(o&&o.signature!==signature){
-        if(o.item.catalogId===item.catalogId&&o.item.scale===item.scale){
+        if(o.shapeSignature===shapeSignature){
           const oldGroup=o.group,group=makeGroup();group.position.copy(oldGroup.position);group.quaternion.copy(oldGroup.quaternion);
           this.scene.remove(oldGroup);disposeOwnedGeometry(oldGroup);this.scene.add(group);o.group=group;o.signature=signature;
         }else{this.removeObject(o);this.objects.delete(item.uid);o=null;}
@@ -146,7 +155,7 @@ export class DesignScene {
       if(!o){
         const group=makeGroup();this.scene.add(group);
         const body=createBody(def,item);if(body){this.world.addBody(body);if(def.small){body.addEventListener('sleep',()=>{if(this.dragging?.uid===item.uid)return;const current=this.objects.get(item.uid);if(!current)return;const y=Math.max(0,body.position.y);if(Math.abs(current.item.y-y)>.025||Math.abs(current.item.x-body.position.x)>.025||Math.abs(current.item.z-body.position.z)>.025)this.callbacks.onPhysics?.(item.uid,{x:body.position.x,y,z:body.position.z});});}}
-        o={group,body,signature,item,def};this.objects.set(item.uid,o);
+        o={group,body,signature,shapeSignature,item,def};this.objects.set(item.uid,o);
       }
       if(this.dragging?.uid!==item.uid){
         const changed=!o.last||['x','y','z','rotation'].some(k=>o.last[k]!==item[k]);
@@ -170,13 +179,14 @@ export class DesignScene {
     this.scene.background.set(day<.1?'#b8bdbb':'#eeeee7');this.invalidate(true);
   }
   setWalls(show){this.wallVisible=show;for(const w of this.walls||[])w.visible=show;if(this.walkEnvelope)this.walkEnvelope.visible=show&&this.view==='walk';this.invalidate(true);}
-  setMode(mode){this.mode=mode;this.renderer.domElement.style.cursor=mode==='move'?'grab':'default';}
+  setMode(mode){this.mode=mode;this.renderer.domElement.style.cursor=mode==='navigate'||mode==='move'?'grab':'default';}
   setGrid(show){this.gridState=show;this.grid.visible=show;this.invalidate();}
   setSnap(show){this.snap=show;}
-  select(uid){this.selectedId=uid;this.updateSelection();this.invalidate();}
+  select(uid){this.selectedId=uid;if(!uid)this.setMode('navigate');else if(this.mode==='navigate')this.setMode('select');this.updateSelection();this.invalidate();}
   updateSelection(){const o=this.objects.get(this.selectedId);this.selection.visible=!!o;if(o){this.selection.box.setFromObject(o.group);this.selection.box.expandByScalar(.025);}}
   setView(view){
     this.releaseMouse();this.keys.clear();
+    this.navigationGesture=null;this.pendingDrag=null;
     this.view=view;const l=LAYOUTS.find(l=>l.id===this.design?.layoutId)||LAYOUTS[0];const dim=Math.max(l.width,l.depth);
     this.camera.fov=view==='walk'?68:38;this.camera.updateProjectionMatrix();
     if(this.walkEnvelope)this.walkEnvelope.visible=this.wallVisible&&view==='walk';
@@ -203,13 +213,18 @@ export class DesignScene {
     if(event.button!==0)return;
     if(this.view==='walk'){if(event.pointerType==='touch')this.enableFallbackLook();else if(this.lookState!=='soft')this.captureMouse();this.lookPointer={id:event.pointerId,x:event.clientX,y:event.clientY};return;}
     this.ray(event);const hits=this.raycaster.intersectObjects([...this.objects.values()].map(o=>o.group),true);const uid=hits[0]?.object.userData.uid;
-    if(uid&&['select','move'].includes(this.mode)){
+    if(this.mode!=='move'||!uid){
+      this.navigationGesture={uid,part:hits[0]?.object.userData.surface?.id||'body',startX:event.clientX,startY:event.clientY,pointerId:event.pointerId,moved:false};
+      this.renderer.domElement.style.cursor='grabbing';
+      return;
+    }
+    if(uid&&this.mode==='move'){
       const o=this.objects.get(uid);this.callbacks.onSelect(uid);this.select(uid);
       this.callbacks.onPartSelect?.(hits[0].object.userData.surface?.id||'body');
       this.dragPlane.constant=-o.group.position.y;const grabbed=new THREE.Vector3();this.raycaster.ray.intersectPlane(this.dragPlane,grabbed);
       this.pendingDrag={uid,startX:event.clientX,startY:event.clientY,original:o.group.position.clone(),offset:o.group.position.clone().sub(grabbed)};
       this.controls.enabled=false;event.stopImmediatePropagation();
-    }else if(!uid){this.callbacks.onSelect(null);this.select(null);}
+    }
   }
   pointerMove(event){
     if(this.view==='walk'){
@@ -220,6 +235,7 @@ export class DesignScene {
       }
       return;
     }
+    if(this.navigationGesture){const p=this.navigationGesture;if(Math.hypot(event.clientX-p.startX,event.clientY-p.startY)>5)p.moved=true;return;}
     if(!this.pendingDrag)return;
     const p=this.pendingDrag,o=this.objects.get(p.uid);if(!o)return;
     if(!this.dragging&&Math.hypot(event.clientX-p.startX,event.clientY-p.startY)<4)return;
@@ -241,10 +257,15 @@ export class DesignScene {
       this.updateSelection();this.invalidate(true);this.callbacks.onDragPosition?.({x,y,z});
     }
   }
-  pointerUp(){
+  pointerUp(event){
     this.lookPointer=null;
+    const gesture=this.navigationGesture;this.navigationGesture=null;
+    if(event&&gesture&&event.pointerId===gesture.pointerId&&!gesture.moved&&Math.hypot(event.clientX-gesture.startX,event.clientY-gesture.startY)<=5){
+      const uid=this.objects.has(gesture.uid)?gesture.uid:null;this.callbacks.onSelect(uid);this.select(uid);
+      if(uid)this.callbacks.onPartSelect?.(gesture.part);
+    }
     if(this.dragging){const o=this.objects.get(this.dragging.uid);if(o){if(o.body){o.body.mass=o.oldMass??o.body.mass;o.body.updateMassProperties();o.body.wakeUp();}this.callbacks.onMove(this.dragging.uid,{x:o.group.position.x,y:o.group.position.y,z:o.group.position.z});if(!o.def.small)for(const small of this.objects.values())if(small.def.small)small.body?.wakeUp();}}
-    this.dragging=null;this.pendingDrag=null;this.controls.enabled=this.view!=='walk';this.renderer.domElement.style.cursor=this.mode==='move'?'grab':'default';
+    this.dragging=null;this.pendingDrag=null;this.controls.enabled=this.view!=='walk';this.setMode(this.mode);
   }
   async snapshot(){this.selection.visible=false;this.grid.visible=false;this.renderer.shadowMap.needsUpdate=true;this.composer.render();const data=this.renderer.domElement.toDataURL('image/png');this.updateSelection();this.grid.visible=!!this.gridState;this.invalidate();return data;}
   animate(){
@@ -258,7 +279,7 @@ export class DesignScene {
       const next=this.camera.position.clone();next.x+=direction.x*speed;next.z+=direction.z*speed;
       const l=LAYOUTS.find(l=>l.id===this.design.layoutId);next.x=THREE.MathUtils.clamp(next.x,-l.width/2+.25,l.width/2-.25);next.z=THREE.MathUtils.clamp(next.z,-l.depth/2+.25,l.depth/2-.25);
       let blocked=false;
-      for(const o of this.objects.values())if(!o.def.rug&&!o.def.small&&!o.def.ceiling&&!o.def.wall){const b=o.bounds;if(b.max.y>.25&&b.min.y<1.8&&next.x>b.min.x-.15&&next.x<b.max.x+.15&&next.z>b.min.z-.15&&next.z<b.max.z+.15)blocked=true;}
+      for(const o of this.objects.values())if(!o.def.rug&&!o.def.small&&!o.def.ceiling&&!o.def.wall){if(o.def.architecture){if(blocksWallWalk(o.def,o.item,next))blocked=true;}else{const b=o.bounds;if(b.max.y>.25&&b.min.y<1.8&&next.x>b.min.x-.15&&next.x<b.max.x+.15&&next.z>b.min.z-.15&&next.z<b.max.z+.15)blocked=true;}}
       if(l.partitions&&((Math.abs(next.x-1.45)<.25&&(next.z<-l.depth*.08||next.z>l.depth*.32))||(next.x>1.45&&Math.abs(next.z-.45)<.25)))blocked=true;
       if(!blocked&&!this.camera.position.equals(next)){this.camera.position.copy(next);this.invalidate();}if(keys.has('arrowleft')||keys.has('arrowright'))this.invalidate();this.camera.rotation.set(this.walkLook.pitch,this.walkLook.yaw,0,'YXZ');
     }else this.controls.update();

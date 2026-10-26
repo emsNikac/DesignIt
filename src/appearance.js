@@ -22,6 +22,7 @@ export function validateAppearance(value){
 
 export function partLabel(id,def){
   const names={body:'Main body',frame:'Frame & legs',top:'Top surface',hardware:'Metalwork & fittings',accent:'Accent details',ceramic:'Ceramic surfaces',glass:'Glass',shade:'Light shade',details:'Details',pot:'Planter',foliage:'Foliage',cooktop:'Cooktop',pages:'Book pages'};
+  if(def.architecture)return {body:'Wall surface',frame:'Frame & trim',accent:'Skirting & trim',glass:'Glass panels'}[id]||names[id]||id;
   if(id==='body'&&['kitchen','island','vanity','double-vanity','wardrobe','console','dresser','nightstand'].includes(def.model))return 'Cabinetry';
   if(id==='body'&&['sofa','chair','sectional','chaise','beanbag','ottoman','ottoman-square','bed'].includes(def.model))return 'Upholstery & fabric';
   if(id==='top')return ['kitchen','island','vanity','double-vanity'].includes(def.model)?'Countertop':'Tabletop';

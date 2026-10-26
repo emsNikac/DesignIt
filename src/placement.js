@@ -1,6 +1,8 @@
 import {CATALOG,LAYOUTS} from './catalog.js';
+import {itemDefinition} from './architecture.js';
 
 export function footprint(def,item={rotation:0,scale:1,x:0,z:0}){
+  def=itemDefinition(def,item);
   const c=Math.abs(Math.cos(item.rotation||0)),s=Math.abs(Math.sin(item.rotation||0)),scale=item.scale||1;
   return {x:item.x||0,z:item.z||0,halfX:(def.size[0]*c+def.size[2]*s)*scale/2,halfZ:(def.size[0]*s+def.size[2]*c)*scale/2};
 }

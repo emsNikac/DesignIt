@@ -10,7 +10,7 @@ import {disposeOwnedGeometry} from './mesh-optimizer.js';
 globalThis.document={createElement:()=>({getContext:()=>new Proxy({},{get:()=>()=>{}})})};
 test('the expanded collection has unique IDs and broad choices in every category',()=>{
   assert.ok(CATALOG.length>=170);assert.equal(new Set(CATALOG.map(d=>d.id)).size,CATALOG.length);
-  for(const c of CATEGORIES.filter(c=>c.id!=='all'))assert.ok(CATALOG.filter(d=>d.category===c.id).length>=15,c.name);
+  for(const c of CATEGORIES.filter(c=>c.id!=='all'))assert.ok(CATALOG.filter(d=>d.category===c.id).length>=(c.id==='architecture'?8:15),c.name);
 });
 test('every catalog entry builds a finite 3D model and an appropriate collider',()=>{
   for(const def of CATALOG){

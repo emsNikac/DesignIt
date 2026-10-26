@@ -1,4 +1,5 @@
 import * as CANNON from 'cannon-es';
+import {itemDefinition,wallSections} from './architecture.js';
 
 export function createWorld(width, depth, partitions) {
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.81, 0), allowSleep: true });
@@ -18,11 +19,14 @@ export function createWorld(width, depth, partitions) {
 }
 
 export function createBody(def, item) {
+  def=itemDefinition(def,item);
   if(def.rug || def.ceiling || (def.wall&&!def.wallSupport)) return null;
   const s=item.scale;
   const body = new CANNON.Body({mass:def.small?.4:0,allowSleep:true,sleepSpeedLimit:.08,sleepTimeLimit:.7,linearDamping:.6,angularDamping:.8});
   const add=(w,h,d,x=0,y=h/2,z=0)=>body.addShape(new CANNON.Box(new CANNON.Vec3(w*s/2,h*s/2,d*s/2)),new CANNON.Vec3(x*s,y*s,z*s));
-  if(def.model==='smallplant'){
+  if(def.architecture){
+    for(const b of wallSections(def))add(b.width,b.height,b.depth,b.x,b.y,b.z);
+  }else if(def.model==='smallplant'){
     // Foliage is flexible: collide with the pot, not a solid box around leaves.
     // The old box wedged against the next shelf and never allowed sleep.
     add(.13,.12,.13,0,.06);

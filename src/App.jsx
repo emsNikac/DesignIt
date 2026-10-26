@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownToLine, ArrowRight, Armchair, Box, Camera, Check, ChevronDown, CircleHelp, Copy, Download, Expand, Eye, Footprints, Grid2X2, Heart, House, Layers3, LayoutDashboard, LoaderCircle, Maximize, Minus, Moon, MousePointer2, Move, Paintbrush, Plus, Redo2, RotateCcw, RotateCw, Search, Settings2, Sparkles, Sun, Sunset, Trash2, Undo2, Upload, X } from 'lucide-react';
+import { ArrowDownToLine, ArrowRight, Armchair, Box, Camera, Check, ChevronDown, CircleHelp, Copy, Download, Expand, Eye, Footprints, Grid2X2, Hand, Heart, House, Layers3, LayoutDashboard, LoaderCircle, Maximize, Minus, Moon, MousePointer2, Move, Paintbrush, Plus, Redo2, RotateCcw, RotateCw, Search, Settings2, Sparkles, Sun, Sunset, Trash2, Undo2, Upload, X } from 'lucide-react';
 import { CATALOG, CATEGORIES, SWATCHES, WALL_COLORS, FLOOR_TYPES, LAYOUTS, makeItem, validateDesign } from './catalog.js';
 import { DesignScene } from './scene.js';
 import CatalogThumbnail from './CatalogThumbnail.jsx';
+import CategoryTabs from './CategoryTabs.jsx';
+import {itemDefinition,fitWallDimensions} from './architecture.js';
 import {FINISHES,PATTERNS} from './appearance.js';
 import {HOBBIES} from './hobbies.js';
 import {findPlacement} from './placement.js';
@@ -36,6 +38,7 @@ function GraphicsPanel({settings,onChange}){
     <div className="graphics-presets">{Object.entries(GRAPHICS_PRESETS).map(([id,p])=><button key={id} className={settings.preset===id?'selected':''} onClick={()=>onChange({...p,preset:id})}><strong>{p.label}{id==='original'&&<span>Default look</span>}</strong><small>{p.description}</small>{settings.preset===id&&<Check size={15}/>}</button>)}</div>
     <div className="setting-section"><div className="section-label"><h3>Fine-tune the visuals</h3></div>
       <label className="graphics-field">Render resolution<select aria-label="Render resolution" value={settings.pixelRatio} onChange={e=>edit({pixelRatio:+e.target.value})}>{[.5,.75,1,1.25,1.5,1.75,2].map(n=><option key={n} value={n}>{Math.round(n*100)}%{n===1.75?' · original':''}</option>)}</select></label>
+      <label className="graphics-field">Anti-aliasing<select aria-label="Anti-aliasing" value={settings.antialias} onChange={e=>edit({antialias:e.target.value})}><option value="off">Off</option><option value="fxaa">Fast · FXAA</option><option value="smaa">High · SMAA</option></select></label>
       <label className="graphics-field">Shadow detail<select aria-label="Shadow detail" value={settings.shadows} onChange={e=>edit({shadows:+e.target.value})}>{[[0,'Off'],[512,'Low'],[1024,'Medium'],[2048,'Original'],[4096,'Ultra']].map(([n,label])=><option key={n} value={n}>{label}</option>)}</select></label>
       <label className="graphics-field graphics-toggle">Contact shading<input aria-label="Contact shading" type="checkbox" checked={settings.ao} onChange={e=>edit({ao:e.target.checked})}/></label>
       <label className="graphics-field">Shading quality<select aria-label="Shading quality" disabled={!settings.ao} value={settings.aoSamples} onChange={e=>edit({aoSamples:+e.target.value})}>{[[4,'Low'],[6,'Balanced'],[8,'Medium'],[12,'Original'],[16,'Ultra']].map(([n,label])=><option key={n} value={n}>{label}</option>)}</select></label>
@@ -46,11 +49,17 @@ function GraphicsPanel({settings,onChange}){
   </div>;
 }
 
+function WallDimensions({item,definition,onChange}){
+  const dimensions=item.dimensions||definition.size;
+  return <div className="wall-dimensions">{['Length','Height','Thickness'].map((label,index)=><label key={label}>{label}<span><input aria-label={`Wall ${label.toLowerCase()} in meters`} type="number" min={[.5,.4,.06][index]} max={[8,3.1,.4][index]} step={index===2?.01:.1} value={dimensions[index]} onChange={event=>{const value=+event.target.value;if(!Number.isFinite(value))return;onChange(dimensions.map((n,i)=>i===index?Math.max([.5,.4,.06][i],Math.min([8,3.1,.4][i],value)):n));}}/>m</span></label>)}</div>;
+}
+
 function App(){
   const [design,setDesign]=useState(loadDesign),designRef=useRef(design);
   designRef.current=design;
   const [panel,setPanel]=useState('furniture'),[category,setCategory]=useState('all'),[search,setSearch]=useState(''),[favoritesOnly,setFavoritesOnly]=useState(false);
-  const [selectedId,setSelectedId]=useState(null),[view,setView]=useState('orbit'),[mode,setMode]=useState('select'),[grid,setGrid]=useState(false),[snap,setSnap]=useState(true),[walls,setWalls]=useState(true);
+  const [selectedId,setSelectedId]=useState(null),[view,setView]=useState('orbit'),[mode,setMode]=useState('navigate'),[grid,setGrid]=useState(false),[snap,setSnap]=useState(true),[walls,setWalls]=useState(true);
+  const selectItem=useCallback(uid=>{setSelectedId(uid);setMode(current=>uid?(current==='move'?'move':'select'):'navigate');},[]);
   const [loading,setLoading]=useState(true),[renderError,setRenderError]=useState(''),[toast,setToast]=useState(''),[saveStatus,setSaveStatus]=useState('saved');
   const [help,setHelp]=useState(false),[spaces,setSpaces]=useState(false),[exportOpen,setExportOpen]=useState(false),[lightOpen,setLightOpen]=useState(false),[intro,setIntro]=useState(!readStorage('forma-onboarded',false));
   const [past,setPast]=useState([]),[future,setFuture]=useState([]),[inspectorTab,setInspectorTab]=useState('appearance');
@@ -76,7 +85,9 @@ function App(){
   const checkpoint=useCallback(()=>{setPast(p=>[...p.slice(-39),designRef.current]);setFuture([]);},[]);
   const updateItem=useCallback((uid,values,history=true)=>change(d=>({...d,items:d.items.map(i=>{
     if(i.uid!==uid)return i;
-    const next={...i,...values},def=CATALOG.find(c=>c.id===next.catalogId),l=LAYOUTS.find(l=>l.id===d.layoutId);
+    const next={...i,...values},base=CATALOG.find(c=>c.id===next.catalogId),l=LAYOUTS.find(l=>l.id===d.layoutId);
+    if(base.architecture)next.dimensions=fitWallDimensions(next.dimensions||base.size,next,l);
+    const def=itemDefinition(base,next);
     const co=Math.abs(Math.cos(next.rotation)),si=Math.abs(Math.sin(next.rotation));
     const halfX=(def.size[0]*co+def.size[2]*si)*next.scale/2,halfZ=(def.size[0]*si+def.size[2]*co)*next.scale/2;
     next.x=Math.max(-l.width/2+halfX+.08,Math.min(l.width/2-halfX-.08,next.x));
@@ -89,28 +100,29 @@ function App(){
   useEffect(()=>{
     try{
       const engine=new DesignScene(mountRef.current,{
-        onSelect:setSelectedId,onMove:(uid,pos)=>updateItem(uid,pos,false),onDragStart:checkpoint,
+        onSelect:selectItem,onMove:(uid,pos)=>updateItem(uid,pos,false),onDragStart:checkpoint,
         onPhysics:(uid,pos)=>{if(designRef.current.kind!=='demo'&&designRef.current.items.some(i=>i.uid===uid))updateItem(uid,pos,false);},onView:setView,onLookState:setLookState,onPartSelect:setSelectedPart,
       },initialGraphics.current);
       engineRef.current=engine;engine.setDesign(designRef.current);setLoading(false);
       return ()=>{engine.dispose();clearTimeout(toastTimer.current);};
     }catch(e){console.error(e);setRenderError('Your browser could not start the 3D renderer. Enable hardware acceleration and refresh to enter the studio.');setLoading(false);}
-  },[updateItem,checkpoint]);
+  },[updateItem,checkpoint,selectItem]);
   useEffect(()=>{engineRef.current?.setDesign(design);setSaveStatus('saving');const timer=setTimeout(()=>{
     try{setSavedDesigns(saveWorkspace(localStorage,design).designs);setSaveStatus('saved');}catch{setSaveStatus('failed');}
   },650);return()=>clearTimeout(timer);},[design]);
   useEffect(()=>{engineRef.current?.select(selectedId);},[selectedId]);
+  useEffect(()=>{if(selectedId&&!selected)selectItem(null);},[selectedId,selected,selectItem]);
   useEffect(()=>{setPartOptions(engineRef.current?.getAppearanceParts(selectedId)||[]);},[selectedId,design]);
   useEffect(()=>{engineRef.current?.setMode(mode);},[mode]);
   useEffect(()=>{engineRef.current?.setGrid(grid);},[grid]);
   useEffect(()=>{engineRef.current?.setSnap(snap);},[snap]);
   useEffect(()=>{engineRef.current?.setWalls(walls);},[walls]);
   useEffect(()=>{engineRef.current?.applyGraphics(graphics);try{localStorage.setItem(GRAPHICS_KEY,JSON.stringify(graphics));}catch{}},[graphics]);
-  const removeSelected=useCallback(()=>{if(!selectedId)return;change(d=>({...d,items:d.items.filter(i=>i.uid!==selectedId)}));setSelectedId(null);notify('Item removed from your space');},[selectedId,change,notify]);
+  const removeSelected=useCallback(()=>{if(!selectedId)return;change(d=>({...d,items:d.items.filter(i=>i.uid!==selectedId)}));selectItem(null);notify('Item removed from your space');},[selectedId,change,notify]);
   const duplicateSelected=useCallback(()=>{
-    const i=designRef.current.items.find(i=>i.uid===selectedId);if(!i)return;const def=CATALOG.find(c=>c.id===i.catalogId);const l=LAYOUTS.find(l=>l.id===designRef.current.layoutId);
+    const i=designRef.current.items.find(i=>i.uid===selectedId);if(!i)return;const def=itemDefinition(CATALOG.find(c=>c.id===i.catalogId),i);const l=LAYOUTS.find(l=>l.id===designRef.current.layoutId);
     const x=Math.min(l.width/2-def.size[0]*i.scale/2-.1,i.x+.4),z=Math.min(l.depth/2-def.size[2]*i.scale/2-.1,i.z+.4);
-    const clone=makeItem(i.catalogId,x,z,i.rotation,i.y,{color:i.color,scale:i.scale,appearance:structuredClone(i.appearance||{}),...(i.pattern?{pattern:i.pattern}:{})});change(d=>({...d,items:[...d.items,clone]}));setSelectedId(clone.uid);notify('A little more of a good thing. Item duplicated.');
+    const clone=makeItem(i.catalogId,x,z,i.rotation,i.y,{color:i.color,scale:i.scale,appearance:structuredClone(i.appearance||{}),...(i.dimensions?{dimensions:[...i.dimensions]}:{}),...(i.pattern?{pattern:i.pattern}:{})});change(d=>({...d,items:[...d.items,clone]}));selectItem(clone.uid);notify('A little more of a good thing. Item duplicated.');
   },[selectedId,change,notify]);
   useEffect(()=>{const handler=e=>{
     if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable)return;
@@ -118,8 +130,8 @@ function App(){
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();duplicateSelected();}
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();removeSelected();}
     if(e.key.toLowerCase()==='r'&&selectedId)updateItem(selectedId,{rotation:(selected?.rotation||0)+Math.PI/12});
-    if(e.key==='Escape'){engineRef.current?.releaseMouse();setSelectedId(null);setHelp(false);setSpaces(false);setExportOpen(false);setLightOpen(false);}
-    if(e.key.toLowerCase()==='v')setMode('select');if(e.key.toLowerCase()==='m')setMode('move');
+    if(e.key==='Escape'){engineRef.current?.releaseMouse();selectItem(null);setHelp(false);setSpaces(false);setExportOpen(false);setLightOpen(false);}
+    if(e.key.toLowerCase()==='h')selectItem(null);if(e.key.toLowerCase()==='v')setMode('select');if(e.key.toLowerCase()==='m')setMode('move');
   };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[undo,redo,duplicateSelected,removeSelected,selectedId,selected?.rotation,updateItem]);
   useEffect(()=>{if(!exportOpen)return;const handler=e=>{if(!headerRef.current?.contains(e.target))setExportOpen(false);};document.addEventListener('pointerdown',handler);return()=>document.removeEventListener('pointerdown',handler);},[exportOpen]);
 
@@ -129,18 +141,18 @@ function App(){
     let x=position?.x||0,z=position?.z||0;
     // Wall pieces begin at a useful height against the rear wall.
     if(def.wall){x=0;z=-l.depth/2+def.size[2]/2+.11;}
-    const item=makeItem(def.id,x,z,0,def.ceiling?Math.max(.1,3.05-def.size[1]):def.wall?Math.max(.1,(3.1-def.size[1])/2):0);
-    change(d=>({...d,items:[...d.items,item]}));setSelectedId(item.uid);setMode('move');setInspectorTab('appearance');
+    const item=makeItem(def.id,x,z,0,def.elevation??(def.ceiling?Math.max(.1,3.05-def.size[1]):def.wall?Math.max(.1,(3.1-def.size[1])/2):0));
+    change(d=>({...d,items:[...d.items,item]}));selectItem(item.uid);setMode('move');setInspectorTab('appearance');
     notify(`${def.name} added. Drag it to make it yours.`);
   };
   const toggleFavorite=(e,id)=>{e.stopPropagation();change(d=>({...d,favoriteIds:d.favoriteIds.includes(id)?d.favoriteIds.filter(i=>i!==id):[...d.favoriteIds,id]}),false);};
   const filtered=useMemo(()=>CATALOG.filter(i=>(category==='all'||i.category===category)&&(category!=='hobbies'||!hobby||i.hobby===hobby)&&(!favoritesOnly||design.favoriteIds.includes(i.id))&&`${i.name} ${i.finish} ${i.category}`.toLowerCase().includes(search.toLowerCase())),[category,hobby,search,favoritesOnly,design.favoriteIds]);
-  const selectView=v=>{setView(v);engineRef.current?.setView(v);if(v==='walk'){setSelectedId(null);setLightOpen(false);setExportOpen(false);engineRef.current?.captureMouse();}};
+  const selectView=v=>{setView(v);engineRef.current?.setView(v);if(v==='walk'){selectItem(null);setLightOpen(false);setExportOpen(false);engineRef.current?.captureMouse();}};
   const openSpaces=(tab='saved',layoutId=design.layoutId)=>{engineRef.current?.releaseMouse();setSpacesTab(tab);setNewLayout(layoutId);setNewName('');setSpaces(true);};
   const activateDesign=next=>{
     engineRef.current?.releaseMouse();
     try{saveWorkspace(localStorage,designRef.current);setSavedDesigns(saveWorkspace(localStorage,next).designs);}catch{notify('Browser storage is full. Export your current design to keep a backup.');return false;}
-    designRef.current=next;setDesign(next);setPast([]);setFuture([]);setSelectedId(null);setSpaces(false);setIntro(false);
+    designRef.current=next;setDesign(next);setPast([]);setFuture([]);selectItem(null);setSpaces(false);setIntro(false);
     engineRef.current?.setView('orbit');setView('orbit');
     return true;
   };
@@ -181,19 +193,19 @@ function App(){
       <main className="design-stage">
         <div className="stage-heading"><div className="eyebrow">YOUR CANVAS, YOUR RULES</div><button className="layout-title" onClick={()=>openSpaces()}>{layout.name}<ChevronDown size={19}/></button><div className="layout-meta"><span>{layout.area} m²</span><span className="meta-dot"/><span>{layout.style}</span><span className="meta-dot"/><span className="free-tag">{design.kind==='demo'?'Demo home':'Your design'}</span></div></div>
         <div className="stage-top-tools"><button className="lighting-chip" onClick={()=>setLightOpen(!lightOpen)} aria-expanded={lightOpen}>{design.time>19||design.time<6?<Moon size={16}/>:<Sun size={17}/>}<span>{formatTime(design.time)}</span><ChevronDown size={12}/></button><IconButton label="Expand studio fullscreen" className="stage-button" onClick={()=>{if(document.fullscreenElement)document.exitFullscreen?.();else document.documentElement.requestFullscreen?.().catch(()=>notify('Fullscreen is unavailable in this view.'));}}><Expand size={18}/></IconButton></div>
-        <div ref={mountRef} className="scene-canvas" role="application" aria-label="Interactive 3D apartment. Drag furniture to move it. Use the catalog to add items. Scroll to zoom. Use the view controls for a floor plan or walkthrough."/>
+        <div ref={mountRef} className="scene-canvas" role="application" aria-label="Interactive 3D apartment. Drag to orbit the view. Click an item to select it, then use Move to reposition it. Use the catalog to add items. Scroll to zoom. Use the view controls for a floor plan or walkthrough."/>
         {(loading||renderError)&&<div className="scene-loading">{loading?<><LoaderCircle className="spin" size={30}/><h3>Making room for you…</h3></>:<><Box size={30}/><h3>The studio needs WebGL</h3><p>{renderError}</p><button className="button" onClick={()=>location.reload()}>Try again</button></>}</div>}
         {lightOpen&&<div className="lighting-popover popover"><IconButton className="popover-close" label="Close light controls" onClick={()=>setLightOpen(false)}><X size={16}/></IconButton>{lightControls(true)}</div>}
         {view==='walk'&&<>
           {['locked','soft'].includes(lookState)?<div className="walk-crosshair" aria-hidden="true"/>:<div className="walk-start"><Footprints size={21}/><strong>{lookState==='fallback'?'Explore at your own pace':'Step inside your space'}</strong><p>{lookState==='fallback'?'Move the mouse over the room to look around. W A S D to walk, Esc to pause. Touch players can drag to look.':'Click to look around with your mouse. W A S D to walk. Press Esc to free the cursor.'}</p><button className="button primary" onClick={()=>lookState==='fallback'?engineRef.current?.enableFallbackLook():engineRef.current?.captureMouse()}>{lookState==='fallback'?'Use mouse-look':'Start exploring'} <ArrowRight size={14}/></button></div>}
           <div className="walk-hud">{['locked','soft'].includes(lookState)?'Mouse to look · W A S D to walk · Shift to walk faster · Esc to release':'Walkthrough paused · click the room to continue'}</div>
         </>}
-        <div className={cn('canvas-tools',view==='walk'&&'walk-hidden')}><IconButton label="Select tool (V)" active={mode==='select'} onClick={()=>setMode('select')}><MousePointer2 size={18}/></IconButton><IconButton label="Move tool (M)" active={mode==='move'} onClick={()=>setMode('move')}><Move size={18}/></IconButton><span className="tool-divider"/><IconButton label={grid?'Hide placement grid':'Show placement grid'} active={grid} onClick={()=>setGrid(!grid)}><Grid2X2 size={18}/></IconButton><IconButton label={snap?'Turn off grid snapping':'Snap to 10 cm grid'} active={snap} onClick={()=>setSnap(!snap)}><Maximize size={18}/></IconButton><span className="tool-divider"/><IconButton label={walls?'Hide walls':'Show walls'} active={walls} onClick={()=>setWalls(!walls)}><Layers3 size={18}/></IconButton></div>
+        <div className={cn('canvas-tools',view==='walk'&&'walk-hidden')}><IconButton label="Navigate view (H)" active={mode==='navigate'} onClick={()=>selectItem(null)}><Hand size={18}/></IconButton><IconButton label="Select tool (V)" active={mode==='select'} onClick={()=>setMode('select')}><MousePointer2 size={18}/></IconButton><IconButton label="Move tool (M)" active={mode==='move'} onClick={()=>setMode('move')}><Move size={18}/></IconButton><span className="tool-divider"/><IconButton label={grid?'Hide placement grid':'Show placement grid'} active={grid} onClick={()=>setGrid(!grid)}><Grid2X2 size={18}/></IconButton><IconButton label={snap?'Turn off grid snapping':'Snap to 10 cm grid'} active={snap} onClick={()=>setSnap(!snap)}><Maximize size={18}/></IconButton><span className="tool-divider"/><IconButton label={walls?'Hide walls':'Show walls'} active={walls} onClick={()=>setWalls(!walls)}><Layers3 size={18}/></IconButton></div>
 
         {intro&&!selected&&<div className="welcome-card"><button className="close-welcome" aria-label="Dismiss welcome" onClick={dismissIntro}><X size={14}/></button><span className="welcome-icon"><Sparkles size={19}/></span><div><strong>A space of your own.</strong><p>A little rearranging. A lot of possibility.<br/>Pick a piece and make yourself at home.</p><button onClick={()=>{dismissIntro();setHelp(true);}}>A quick look around <ArrowRight size={13}/></button></div></div>}
 
         {selected&&selectedDef&&<div className="inspector">
-          <div className="inspector-header"><span className="selection-dot"/><div><strong>{selectedDef.name}</strong><span>{selectedDef.finish}</span></div><IconButton label="Deselect item" onClick={()=>setSelectedId(null)}><X size={15}/></IconButton></div>
+          <div className="inspector-header"><span className="selection-dot"/><div><strong>{selectedDef.name}</strong><span>{selectedDef.finish}</span></div><IconButton label="Deselect item" onClick={()=>selectItem(null)}><X size={15}/></IconButton></div>
           <div className="inspector-tabs"><button className={inspectorTab==='appearance'?'active':''} onClick={()=>setInspectorTab('appearance')}>Appearance</button><button className={inspectorTab==='position'?'active':''} onClick={()=>setInspectorTab('position')}>Position</button></div>
           {inspectorTab==='appearance'?<>
             <label className="part-select">Customize part<select aria-label="Object part" value={activePart?.id||''} onChange={e=>setSelectedPart(e.target.value)}>{appearanceParts.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
@@ -202,13 +214,13 @@ function App(){
             <label className="part-select finish-select">Finish<select aria-label="Part finish" value={selected.appearance?.[activePart?.id]?.finish||''} onChange={e=>{const id=activePart?.id;if(!id)return;const next={...selected.appearance?.[id]};if(e.target.value)next.finish=e.target.value;else delete next.finish;updateItem(selectedId,{appearance:{...selected.appearance,[id]:next}});}}><option value="">Original finish</option>{FINISHES.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
             {selectedDef.model==='rug'&&<label className="part-select">Pattern<select aria-label="Rug pattern" value={selected.pattern||''} onChange={e=>updateItem(selectedId,{pattern:e.target.value||undefined})}><option value="">Original pattern</option>{PATTERNS.map(p=><option key={p} value={p}>{p[0].toUpperCase()+p.slice(1)}</option>)}</select></label>}
             <button className="reset-appearance" onClick={()=>{const appearance={...selected.appearance};delete appearance[activePart?.id];updateItem(selectedId,{appearance});}}>Restore this part</button>
-            <div className="inspector-control"><span>Rotation</span><div className="stepper"><button aria-label="Rotate left 15 degrees" onClick={()=>updateItem(selectedId,{rotation:selected.rotation-Math.PI/12})}><RotateCcw size={14}/></button><span>{Math.round(selected.rotation*180/Math.PI)%360}°</span><button aria-label="Rotate right 15 degrees" onClick={()=>updateItem(selectedId,{rotation:selected.rotation+Math.PI/12})}><RotateCw size={14}/></button></div></div><div className="inspector-control"><span>Scale</span><div className="stepper"><button aria-label="Make item smaller" disabled={selected.scale<=.4} onClick={()=>updateItem(selectedId,{scale:Math.max(.4,+(selected.scale-.1).toFixed(1))})}><Minus size={14}/></button><span>{Math.round(selected.scale*100)}%</span><button aria-label="Make item larger" disabled={selected.scale>=2.5} onClick={()=>updateItem(selectedId,{scale:Math.min(2.5,+(selected.scale+.1).toFixed(1))})}><Plus size={14}/></button></div></div></>:<><div className="position-fields">{['x','y','z'].map((axis,i)=><label key={axis}><span>{['X · left / right','Y · elevation','Z · front / back'][i]}</span><div><input aria-label={`Item ${axis} position in meters`} type="number" min={axis==='y'?0:-10} max={axis==='y'?3:10} step=".05" value={Number(selected[axis].toFixed(2))} onChange={e=>{const n=+e.target.value;if(!Number.isFinite(n))return;const max=axis==='x'?layout.width/2-.1:axis==='z'?layout.depth/2-.1:3;updateItem(selectedId,{[axis]:Math.max(axis==='y'?0:-max,Math.min(max,n))});}}/><span>m</span></div></label>)}</div><p className="position-hint">Small objects snap to surfaces. Set elevation to reach a shelf, or drop them onto a table.</p></>}
+            <div className="inspector-control"><span>Rotation</span><div className="stepper"><button aria-label="Rotate left 15 degrees" onClick={()=>updateItem(selectedId,{rotation:selected.rotation-Math.PI/12})}><RotateCcw size={14}/></button><span>{Math.round(selected.rotation*180/Math.PI)%360}°</span><button aria-label="Rotate right 15 degrees" onClick={()=>updateItem(selectedId,{rotation:selected.rotation+Math.PI/12})}><RotateCw size={14}/></button></div></div>{selectedDef.architecture?<WallDimensions item={selected} definition={selectedDef} onChange={dimensions=>updateItem(selectedId,{dimensions})}/>:<div className="inspector-control"><span>Scale</span><div className="stepper"><button aria-label="Make item smaller" disabled={selected.scale<=.4} onClick={()=>updateItem(selectedId,{scale:Math.max(.4,+(selected.scale-.1).toFixed(1))})}><Minus size={14}/></button><span>{Math.round(selected.scale*100)}%</span><button aria-label="Make item larger" disabled={selected.scale>=2.5} onClick={()=>updateItem(selectedId,{scale:Math.min(2.5,+(selected.scale+.1).toFixed(1))})}><Plus size={14}/></button></div></div>}</>:<><div className="position-fields">{['x','y','z'].map((axis,i)=><label key={axis}><span>{['X · left / right','Y · elevation','Z · front / back'][i]}</span><div><input aria-label={`Item ${axis} position in meters`} type="number" min={axis==='y'?0:-10} max={axis==='y'?3:10} step=".05" value={Number(selected[axis].toFixed(2))} onChange={e=>{const n=+e.target.value;if(!Number.isFinite(n))return;const max=axis==='x'?layout.width/2-.1:axis==='z'?layout.depth/2-.1:3;updateItem(selectedId,{[axis]:Math.max(axis==='y'?0:-max,Math.min(max,n))});}}/><span>m</span></div></label>)}</div><p className="position-hint">Small objects snap to surfaces. Set elevation to reach a shelf, or drop them onto a table.</p></>}
           <div className="inspector-footer"><button onClick={duplicateSelected}><Copy size={14}/>Duplicate</button><button className="delete-action" onClick={removeSelected}><Trash2 size={14}/>Remove</button></div>
         </div>}
 
         <div className="zoom-controls"><IconButton label="Zoom in" onClick={()=>engineRef.current?.zoom(1)}><Plus size={17}/></IconButton><span/><IconButton label="Zoom out" onClick={()=>engineRef.current?.zoom(-1)}><Minus size={17}/></IconButton><span/><IconButton label="Reset camera" onClick={()=>engineRef.current?.resetCamera()}><Maximize size={16}/></IconButton></div>
         <div className="stage-bottom"><div className="scene-status"><span className="live-dot"/><span>Live render</span><span className="status-dot">·</span><span>{design.items.length} objects</span></div><div className="view-switcher"><button className={view==='orbit'?'active':''} onClick={()=>selectView('orbit')}><Box size={15}/><span>3D view</span></button><button className={view==='top'?'active':''} onClick={()=>selectView('top')}><LayoutDashboard size={15}/><span>Floor plan</span></button><button className={view==='walk'?'active':''} onClick={()=>selectView('walk')}><Footprints size={15}/><span>Walkthrough</span></button></div><button className="help-shortcut" onClick={()=>setHelp(true)}><CircleHelp size={15}/><span>Controls</span></button></div>
-        <div className="canvas-caption">{view==='walk'?'Click room to capture mouse · Esc to release':'Drag to orbit · scroll to zoom · right-click to pan'}</div>
+        <div className="canvas-caption">{view==='walk'?'Click room to capture mouse · Esc to release':mode==='move'?'Drag objects to move · click empty space to navigate':'Drag to orbit · scroll to zoom · click an object to select'}</div>
       </main>
 
       <aside className="catalog-panel">
@@ -216,7 +228,7 @@ function App(){
         {panel==='furniture'?<>
           <p className="catalog-intro">Considered pieces. Limitless combinations.</p>
           <div className="catalog-search"><Search size={17}/><input aria-label="Search furniture and objects" placeholder="Find something for your space…" value={search} onChange={e=>setSearch(e.target.value)}/>{search&&<button aria-label="Clear search" onClick={()=>setSearch('')}><X size={14}/></button>}<span>⌕</span></div>
-          <div className="category-scroll">{CATEGORIES.map(c=><button key={c.id} className={category===c.id?'active':''} onClick={()=>setCategory(c.id)}>{c.name}</button>)}</div>
+          <CategoryTabs categories={CATEGORIES} value={category} onChange={setCategory}/>
           {category==='hobbies'&&<label className="hobby-filter">Find your hobby<select aria-label="Hobby theme" value={hobby} onChange={e=>setHobby(e.target.value)}><option value="">All 20 hobbies</option>{HOBBIES.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>}
           <div className="catalog-section-title"><span>{search?`Results for “${search}”`:favoritesOnly?'Saved for later':category==='all'?'Curated essentials':CATEGORIES.find(c=>c.id===category).name}<small>{filtered.length} items</small></span><button aria-label={favoritesOnly?'Show all items':'Show favorites'} className={cn('filter-button',favoritesOnly&&'active')} onClick={()=>setFavoritesOnly(!favoritesOnly)}><Heart size={15} fill={favoritesOnly?'currentColor':'none'}/></button></div>
           <div className="catalog-scroll"><div className="product-grid">{filtered.map(item=><div className="product-card" key={item.id}><button className="product-image" onClick={()=>addItem(item)} aria-label={`Add ${item.name} to your flat`}><CatalogThumbnail item={item}/>{item.tag&&<span className="product-tag">{item.tag}</span>}<span className="add-product"><Plus size={16}/></span></button><button className={cn('favorite-button',design.favoriteIds.includes(item.id)&&'is-favorite')} aria-label={`${design.favoriteIds.includes(item.id)?'Unfavorite':'Favorite'} ${item.name}`} onClick={e=>toggleFavorite(e,item.id)}><Heart size={13} fill={design.favoriteIds.includes(item.id)?'currentColor':'none'}/></button><button className="product-name" onClick={()=>addItem(item)}>{item.name}</button><span className="product-finish"><span style={{background:item.color}}/>{item.finish}</span></div>)}</div>{!filtered.length&&<div className="empty-catalog"><Search size={26}/><h3>A little more room to explore.</h3><p>{favoritesOnly?'Tap the heart on a piece to save it here.':'Try another name, material, or category.'}</p><button className="button" onClick={()=>{setSearch('');setCategory('all');setFavoritesOnly(false);}}>Explore all pieces</button></div>}</div>
@@ -225,7 +237,7 @@ function App(){
       </aside>
     </div>
     {toast&&<div className="toast" role="status"><span><Check size={14}/></span>{toast}</div>}
-    {help&&<div className="modal-backdrop" onClick={()=>setHelp(false)}><section className="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={e=>e.stopPropagation()}><IconButton label="Close help" className="modal-close" onClick={()=>setHelp(false)}><X size={20}/></IconButton><span className="modal-symbol"><House size={27}/></span><span className="panel-eyebrow">WELCOME TO YOUR STUDIO</span><h2 id="help-title">Make yourself at home.</h2><p>There’s no right way to make a space your own.<br/>Here are a few things to get you started.</p><div className="help-grid">{[{icon:Armchair,title:'Find your pieces',text:`Explore ${CATALOG.length} pieces. Click one to add it, then drag it anywhere in your flat.`},{icon:Move,title:'A little rearranging',text:'Select a piece to change its color, rotation and size. Small objects rest on tables and open shelves.'},{icon:Sun,title:'Chase the light',text:'Move the time slider from morning to night to see changing sunlight, reflections and shadows.'},{icon:Eye,title:'A new perspective',text:'Click Walkthrough for mouse-look controls. W A S D moves, mouse looks up and down, and Esc releases the cursor.'}].map(({icon:I,title,text})=><div key={title}><I size={22}/><h3>{title}</h3><p>{text}</p></div>)}</div><div className="shortcut-list"><span><kbd>R</kbd> Rotate</span><span><kbd>⌘ D</kbd> Duplicate</span><span><kbd>⌫</kbd> Remove</span><span><kbd>⌘ Z</kbd> Undo</span><span><kbd>Esc</kbd> Deselect</span></div><button className="button primary" onClick={()=>{setHelp(false);dismissIntro();}}>Let’s make room <ArrowRight size={16}/></button><span className="help-local">Your designs save automatically on this device. Export a file to keep a backup.</span></section></div>}
+    {help&&<div className="modal-backdrop" onClick={()=>setHelp(false)}><section className="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={e=>e.stopPropagation()}><IconButton label="Close help" className="modal-close" onClick={()=>setHelp(false)}><X size={20}/></IconButton><span className="modal-symbol"><House size={27}/></span><span className="panel-eyebrow">WELCOME TO YOUR STUDIO</span><h2 id="help-title">Make yourself at home.</h2><p>There’s no right way to make a space your own.<br/>Here are a few things to get you started.</p><div className="help-grid">{[{icon:Armchair,title:'Find your pieces',text:`Explore ${CATALOG.length} pieces. Click one to add it, then drag it anywhere in your flat.`},{icon:Move,title:'A little rearranging',text:'Drag to orbit the view. Click a piece to select it; choose Move to drag it. Deselect to navigate again.'},{icon:Sun,title:'Chase the light',text:'Move the time slider from morning to night to see changing sunlight, reflections and shadows.'},{icon:Eye,title:'A new perspective',text:'Click Walkthrough for mouse-look controls. W A S D moves, mouse looks up and down, and Esc releases the cursor.'}].map(({icon:I,title,text})=><div key={title}><I size={22}/><h3>{title}</h3><p>{text}</p></div>)}</div><div className="shortcut-list"><span><kbd>H</kbd> Navigate</span><span><kbd>M</kbd> Move</span><span><kbd>R</kbd> Rotate</span><span><kbd>⌘ D</kbd> Duplicate</span><span><kbd>⌫</kbd> Remove</span><span><kbd>⌘ Z</kbd> Undo</span><span><kbd>Esc</kbd> Deselect</span></div><button className="button primary" onClick={()=>{setHelp(false);dismissIntro();}}>Let’s make room <ArrowRight size={16}/></button><span className="help-local">Your designs save automatically on this device. Export a file to keep a backup.</span></section></div>}
     {spaces&&<div className="modal-backdrop" onClick={()=>setSpaces(false)}><section className="spaces-modal" role="dialog" aria-modal="true" aria-labelledby="spaces-title" onClick={e=>e.stopPropagation()}>
       <IconButton label="Close spaces" className="modal-close" onClick={()=>setSpaces(false)}><X size={20}/></IconButton>
       <span className="panel-eyebrow">ROOM FOR YOUR IDEAS</span><h2 id="spaces-title">{spacesTab==='new'?'Start with a little possibility.':spacesTab==='demos'?'A little inspiration, always here.':'Your spaces, all together.'}</h2>

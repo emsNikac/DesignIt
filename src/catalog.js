@@ -1,6 +1,10 @@
 import { EXTRA_ITEMS } from './collection.js';
 import {validateAppearance,PATTERNS} from './appearance.js';
 import {HOBBY_ITEMS} from './hobbies.js';
+import {HOME_ITEMS} from './home-collection.js';
+import {WALL_ITEMS,validWallDimensions} from './architecture.js';
+import {FLOOR_TYPES} from './floors.js';
+export {FLOOR_TYPES} from './floors.js';
 
 export const CATEGORIES = [
   { id: 'all', name: 'All items' }, { id: 'seating', name: 'Seating' },
@@ -9,6 +13,7 @@ export const CATEGORIES = [
   { id: 'rugs', name: 'Rugs' }, { id: 'kitchen', name: 'Kitchen' },
   { id: 'bedroom', name: 'Bedroom' }, { id: 'bathroom', name: 'Bathroom' },
   { id: 'hobbies', name: 'Hobbies' },
+  { id: 'architecture', name: 'Walls & dividers' },
 ];
 
 const item = (id, name, category, model, color, size, extra = {}) => ({ id, name, category, model, color, size, ...extra });
@@ -66,6 +71,8 @@ export const CATALOG = [
   item('towelrack', 'Everyday towel rail', 'bathroom', 'towelrack', '#9e927b', [.6, .9, .3], { finish: 'Brass & cotton' }),
   ...EXTRA_ITEMS,
   ...HOBBY_ITEMS,
+  ...HOME_ITEMS,
+  ...WALL_ITEMS,
 ];
 
 export const SWATCHES = ['#7c8060', '#dfd3bd', '#e4dac9', '#ad674b', '#53595a', '#8d9a9d', '#bba38d', '#634832', '#d4c3a2', '#464b3d'];
@@ -74,14 +81,6 @@ export const WALL_COLORS = [
   { name: 'Soft sage', color: '#b2baa3' }, { name: 'Terracotta', color: '#c69276' },
   { name: 'Dusty blue', color: '#a6b6bb' }, { name: 'Forest', color: '#687561' },
   { name: 'Blush', color: '#d6b5a7' }, { name: 'Charcoal', color: '#62645e' },
-];
-export const FLOOR_TYPES = [
-  { id: 'oak', name: 'Natural oak', color: '#b8966d', type: 'wood' },
-  { id: 'walnut', name: 'Smoked walnut', color: '#73523b', type: 'wood' },
-  { id: 'ash', name: 'Whitewashed ash', color: '#d2c4a9', type: 'wood' },
-  { id: 'concrete', name: 'Warm concrete', color: '#bab5a9', type: 'stone' },
-  { id: 'terrazzo', name: 'Cream terrazzo', color: '#d9d1be', type: 'terrazzo' },
-  { id: 'tiles', name: 'Limestone tile', color: '#c4bda8', type: 'tile' },
 ];
 export const LAYOUTS = [
   { id: 'loft', name: 'The Sunday Loft', subtitle: 'Open plan. Endless possibilities.', area: 80, rooms: '1 room', width: 10, depth: 8, style: 'Open-plan loft', badge: 'Currently designing' },
@@ -158,6 +157,7 @@ export function validateDesign(value) {
   const ids = new Set();
   for (const i of value.items) {
     validateAppearance(i.appearance);
+    if(i.dimensions!==undefined&&(!CATALOG.find(c=>c.id===i.catalogId)?.architecture||!validWallDimensions(i.dimensions)))throw new Error('Unsupported wall dimensions.');
     if(i.pattern!==undefined&&(!PATTERNS.includes(i.pattern)||CATALOG.find(c=>c.id===i.catalogId)?.model!=='rug'))throw new Error('Unsupported rug pattern.');
     if (!CATALOG.some(c => c.id === i.catalogId) || typeof i.uid !== 'string' || ids.has(i.uid) || ![i.x,i.y,i.z,i.rotation,i.scale].every(finite) || i.scale < .3 || i.scale > 3 || Math.abs(i.x) > 20 || Math.abs(i.z) > 20 || i.y < 0 || i.y > 10 || !color(i.color)) throw new Error('This design contains unsupported items or positions.');
     ids.add(i.uid);

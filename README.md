@@ -17,20 +17,23 @@ Press `Ctrl+C` in the terminal to stop the server and close its port.
 
 ## In the studio
 
-- Browse 238 furniture, kitchen, bedroom, bathroom, lighting, decorative and hobby items. Click to add; drag to place. Larger pieces start in a clear area when one is available.
+- Browse 278 furniture, kitchen, bedroom, bathroom, lighting, decorative, hobby and architectural items. Click to add; newly added pieces enter Move mode. The category row supports its arrows, mouse wheel, trackpad, scrollbar and touch swipes. Larger pieces start in a clear area when one is available.
+- Navigate is the default tool: drag anywhere, including over furniture, to orbit; scroll to zoom and right-drag to pan. A short click selects an object. Choose **Move** to drag it. Clicking empty space, closing the inspector, pressing `H` or pressing `Esc` returns to navigation.
 - Select an object and choose **Customize part** to edit its individual surfaces. Kitchen and vanity countertops, table tops, cabinetry, frames, upholstery, cushions, metalwork, planters and other details can have independent colors and finishes. Clicking a surface selects its part directly. There are 12 finish choices, including wood, woven fabric, leather, marble, terrazzo and brushed metal; rectangular rugs also have five pattern choices. Restore each part individually. Customizations survive undo, duplication, saving and JSON export/import.
 - Explore **Hobbies** and filter by 20 themes, with three objects per theme: bicycles, treadmills, exercise equipment, instruments, gaming setups, art and craft supplies, gardening, camping, fishing, travel, board games, cinema, dance, collections and pet furniture. These are widely practiced hobby themes, not a definitive global ranking; see [selection notes](docs/hobbies.md).
+- The expanded home collection includes recliners, office furniture, ceiling and pedestal fans, a vacuum dock, small appliances, nursery and bunk beds, toys, and laundry equipment.
+- Browse **Walls & dividers** for eight interior wall types, including doorway/window walls, half walls, framed glass and oak slats. Place, rotate, recolor and duplicate them. Set length, height and thickness separately; edits are saved and exported. Doorway openings allow walking and props through while the panels block them. Wall lengths adjust to the available room bounds when rotated.
 - Edit rotation, size or position. Small objects have gravity and snap onto upward-facing surfaces. Tables and bookcases use compound colliders with open spaces.
 - Choose **New design**, pick one of four empty floor plans and name your design. Create multiple independent designs using the same flat layout.
 - Open the furnished homes from **My spaces → Demo homes**. Edits create a personal copy; the original demos stay available. Older per-layout saves migrate into **Your designs** automatically.
-- Change wall paint, floor finishes and bathroom tiles. Bathroom tile finishes apply to the two divided layouts.
+- Change wall paint, 18 floor materials and bathroom tiles. New floors include oak/walnut herringbone, basketweave parquet, bamboo, cork, slate, marble, terracotta, patterned cement and woven carpet. Bathroom tile finishes apply to the two divided layouts.
 - Change time from midnight through daylight and sunset. Direct sunlight, shadows, ambient light and reflection intensity respond to time.
 - Switch between an orbit camera, a top-down plan and a first-person walkthrough. In Walkthrough, the mouse looks around freely, WASD moves, Shift walks faster and Esc releases the cursor and pauses movement. Click the room to resume. Looking up and down is supported; diagonal movement stays at the same walking speed.
 - Browsers supporting the Pointer Lock API capture the cursor for continuous turning. If capture is unavailable (including some embedded preview browsers), choose **Use mouse-look** to look around by moving the mouse over the room. Touch screens retain drag-to-look controls.
 - Export the current view as PNG. Save and import portable JSON designs.
-- Open **Graphics settings** at the bottom of the left toolbar. **Original** retains the previous resolution, lighting, materials, shadow detail and contact shading. **Balanced**, **Performance** and **Battery saver** reduce rendering cost for weaker devices. Resolution, shadows, contact shading, shading quality and the 30/60 FPS cap can also be adjusted separately. Preferences stay on this browser/device; **Restore original visuals** resets them.
+- Open **Graphics settings** at the bottom of the left toolbar. **Original** retains the previous resolution, lighting, materials, shadow detail and contact shading, and now includes High anti-aliasing to smooth jagged edges. **Balanced**, **Performance** and **Battery saver** reduce rendering cost for weaker devices. Anti-aliasing (**Off**, **Fast · FXAA**, **High · SMAA**), resolution, shadows, contact shading, shading quality and the 30/60 FPS cap can also be adjusted separately. Preferences stay on this browser/device; **Restore original visuals** resets them.
 
-Keyboard shortcuts: `V` select, `M` move, `R` rotate 15°, `Delete` remove, `⌘/Ctrl D` duplicate, `⌘/Ctrl Z` undo, `⌘/Ctrl Shift Z` redo, `Escape` deselect.
+Keyboard shortcuts: `H` navigate/deselect, `V` select, `M` move, `R` rotate 15°, `Delete` remove, `⌘/Ctrl D` duplicate, `⌘/Ctrl Z` undo, `⌘/Ctrl Shift Z` redo, `Escape` deselect.
 
 ## Rendering and simulation
 
