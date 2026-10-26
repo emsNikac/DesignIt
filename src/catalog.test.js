@@ -4,6 +4,7 @@ import {Box3,Vector3} from 'three';
 import {CATALOG,CATEGORIES,makeItem} from './catalog.js';
 import {createModel} from './models.js';
 import {createBody} from './physics.js';
+import {disposeOwnedGeometry} from './mesh-optimizer.js';
 
 // Geometry can be checked without a GPU; the browser verifies texture rendering.
 globalThis.document={createElement:()=>({getContext:()=>new Proxy({},{get:()=>()=>{}})})};
@@ -17,6 +18,6 @@ test('every catalog entry builds a finite 3D model and an appropriate collider',
     assert.ok(!bounds.isEmpty(),def.id);assert.ok([size.x,size.y,size.z].every(n=>Number.isFinite(n)&&n>0),def.id);
     if(def.fit)for(let i=0;i<3;i++)assert.ok(Math.abs(size.getComponent(i)-def.size[i])<.001,`${def.id} dimension ${i}`);
     const body=createBody(def,makeItem(def.id));assert.equal(!!body,!(def.rug||def.ceiling||(def.wall&&!def.wallSupport)),def.id);
-    model.traverse(o=>o.geometry?.dispose());
+    disposeOwnedGeometry(model);
   }
 });

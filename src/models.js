@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { buildCollectionModel } from './collection-models.js';
+import { buildHobbyModel } from './hobby-models.js';
+import { makeSurface, collectParts } from './appearance.js';
+import { sharedGeometry, batchModel } from './mesh-optimizer.js';
 
 const materials = new Map();
 const textures = new Map();
@@ -68,24 +71,32 @@ export function material(color, type = 'matte') {
   if(type==='ceramic'){opts.roughness=.22;}
   if(type==='marble'){opts.map=makeTexture('marble',color);opts.color='#ffffff';opts.roughness=.21;}
   if(type==='glass'){opts.transparent=true;opts.opacity=.18;opts.roughness=.08;opts.metalness=.1;opts.depthWrite=false;}
+  if(type==='rug'){opts.map=makeTexture('rug',color);opts.color='#ffffff';opts.roughness=1;opts.bumpMap=opts.map;opts.bumpScale=.02;}
+  if(type==='leather'){opts.map=makeTexture('cloth',color);opts.color='#ffffff';opts.roughness=.45;opts.bumpMap=opts.map;opts.bumpScale=.006;}
+  if(type==='terrazzo'){opts.map=makeTexture('terrazzo',color);opts.color='#ffffff';opts.roughness=.35;}
+  if(type==='stone'){opts.roughness=.92;}
+  if(type==='lacquer'){opts.roughness=.16;}
+  if(type==='brushed'){opts.metalness=1;opts.roughness=.45;}
+  if(type==='mirror'){opts.metalness=1;opts.roughness=.02;}
   if(type==='glow'){opts.emissive=color;opts.emissiveIntensity=.6;opts.roughness=.65;}
   const m = new C.MeshStandardMaterial(opts); materials.set(key,m); return m;
 }
 
 function mesh(group, geometry, mat, x=0,y=0,z=0, rx=0,ry=0,rz=0) {
-  const m = new C.Mesh(geometry, mat); m.position.set(x,y,z); m.rotation.set(rx,ry,rz); m.castShadow=true;m.receiveShadow=true;group.add(m);return m;
+  const surface=mat?.isSurface?mat:null;
+  const m = new C.Mesh(geometry, surface?surface.resolve():mat);if(surface)m.userData.surface={id:surface.id,defaultColor:surface.defaultColor,defaultFinish:surface.defaultFinish}; m.position.set(x,y,z); m.rotation.set(rx,ry,rz); m.castShadow=true;m.receiveShadow=true;group.add(m);return m;
 }
-function box(g,w,h,d,x,y,z,m,r=.025,ry=0) {return mesh(g,r?new RoundedBoxGeometry(w,h,d,2,Math.min(r,w/3,h/3,d/3)):new C.BoxGeometry(w,h,d),m,x,y,z,0,ry);}
-function cyl(g,rt,rb,h,x,y,z,m,n=40) {return mesh(g,new C.CylinderGeometry(rt,rb,h,n),m,x,y,z);}
-function ball(g,x,y,z,sx,sy,sz,m) {const o=mesh(g,new C.SphereGeometry(1,24,16),m,x,y,z);o.scale.set(sx,sy,sz);return o;}
-function tube(g,a,b,r,m){const va=new C.Vector3(...a),vb=new C.Vector3(...b),d=vb.clone().sub(va);const o=mesh(g,new C.CylinderGeometry(r,r,d.length(),12),m,...va.clone().add(vb).multiplyScalar(.5).toArray());o.quaternion.setFromUnitVectors(new C.Vector3(0,1,0),d.normalize());return o;}
-function torus(g,r,t,x,y,z,m,rx=0,arc=Math.PI*2) {return mesh(g,new C.TorusGeometry(r,t,10,48,arc),m,x,y,z,rx);}
+function box(g,w,h,d,x,y,z,m,r=.025,ry=0) {return mesh(g,sharedGeometry(`box:${w}:${h}:${d}:${r}`,()=>r?new RoundedBoxGeometry(w,h,d,2,Math.min(r,w/3,h/3,d/3)):new C.BoxGeometry(w,h,d)),m,x,y,z,0,ry);}
+function cyl(g,rt,rb,h,x,y,z,m,n=40) {return mesh(g,sharedGeometry(`cylinder:${rt}:${rb}:${h}:${n}`,()=>new C.CylinderGeometry(rt,rb,h,n)),m,x,y,z);}
+function ball(g,x,y,z,sx,sy,sz,m) {const o=mesh(g,sharedGeometry('sphere',()=>new C.SphereGeometry(1,24,16)),m,x,y,z);o.scale.set(sx,sy,sz);return o;}
+function tube(g,a,b,r,m){const va=new C.Vector3(...a),vb=new C.Vector3(...b),d=vb.clone().sub(va);const o=mesh(g,sharedGeometry(`tube:${r}:${d.length()}`,()=>new C.CylinderGeometry(r,r,d.length(),12)),m,...va.clone().add(vb).multiplyScalar(.5).toArray());o.quaternion.setFromUnitVectors(new C.Vector3(0,1,0),d.normalize());return o;}
+function torus(g,r,t,x,y,z,m,rx=0,arc=Math.PI*2) {return mesh(g,sharedGeometry(`torus:${r}:${t}:${arc}`,()=>new C.TorusGeometry(r,t,10,48,arc)),m,x,y,z,rx);}
 function legs(g,w,d,h,m,y=0){for(const x of [-1,1])for(const z of [-1,1])cyl(g,.027,.021,h,x*w/2,y+h/2,z*d/2,m,16);}
 
-function plant(g,color,small=false,monstera=false) {
+function plant(g,color,small=false,monstera=false,part=(id,c,t)=>material(c,t)) {
   const scale=small?.3:monstera?.75:1;
   const holder=new C.Group();g.add(holder);holder.scale.setScalar(scale);
-  const clay=material(small?'#b7ad98':monstera?'#c7bc9f':'#a87959');
+  const clay=part('pot',small?'#b7ad98':monstera?'#c7bc9f':'#a87959','matte');
   cyl(holder,.22,.17,.39,0,.195,0,clay);torus(holder,.207,.022,0,.39,0,clay,Math.PI/2);
   cyl(holder,.195,.195,.025,0,.38,0,material('#463f2d'));
   const stem=material('#666444');
@@ -95,15 +106,19 @@ function plant(g,color,small=false,monstera=false) {
     const angle=i*2.399, height=.68+(i/30)*.94, radius=.15+random()*.22;
     const x=Math.cos(angle)*radius,z=Math.sin(angle)*radius;
     tube(holder,[.02,height-.15,0],[x,height,z],.006,stem);
-    const leaf=ball(holder,x,height,z,monstera?.19:.13,.027,monstera?.12:.065,material(new C.Color(color).multiplyScalar(.78+random()*.5).getStyle()));
+    const leaf=ball(holder,x,height,z,monstera?.19:.13,.027,monstera?.12:.065,part('foliage',new C.Color(color).multiplyScalar(.78+random()*.5).getStyle(),'matte'));
     leaf.rotation.set(random()*.8,angle,random()*.5);
   }
 }
 
-export function createModel(def, overrideColor) {
+const pooledMaterial=material;
+export function createModel(def, overrideColor, appearance={}, pattern, optimize=true) {
+  if(pattern)def={...def,pattern:pattern==='plain'?false:pattern};
   const g=new C.Group();const color=overrideColor||def.color;
-  const wood=material('#ac855d','wood'),darkwood=material('#76543b','wood'),metal=material('#76664b','metal'),black=material('#36382f','metal');
-  const fabric=material(color,'cloth'),white=material('#eeeae0','ceramic'),body=material(color),top=material('#e6e0d4','marble');
+  const part=(id,c,t='matte')=>makeSurface(id,c,t,appearance,pooledMaterial);
+  const material=(c,t='matte')=>part(c===color?'body':t==='wood'?'frame':t==='cloth'||t==='rug'?'accent':t==='metal'?'hardware':t==='glass'?'glass':t==='glow'?'shade':t==='marble'?'top':t==='ceramic'?'ceramic':'details',c,t);
+  const wood=part('frame','#ac855d','wood'),darkwood=part('frame','#76543b','wood'),metal=part('hardware','#76664b','metal'),black=part('frame','#36382f','metal');
+  const fabric=part('body',color,'cloth'),white=part('ceramic','#eeeae0','ceramic'),body=part('body',color,'matte'),top=part('top','#e6e0d4','marble');
   switch(def.model){
     case 'sofa': {
       legs(g,2.48,.75,.15,darkwood);
@@ -114,7 +129,7 @@ export function createModel(def, overrideColor) {
         const b=box(g,.77,.46,.21,i*.79,.7,-.33,fabric,.085);b.rotation.x=-.1;
       }
       for(const x of [-1.28,1.28])box(g,.24,.43,.99,x,.52,.02,fabric,.095);
-      const pillowMat=material('#d0c0a0','cloth'),pillow2=material('#b59a76','cloth');
+      const pillowMat=part('accent','#d0c0a0','cloth'),pillow2=part('accent','#b59a76','cloth');
       for(const [x,m,rz] of [[-.93,pillowMat,-.19],[.94,pillow2,.22]]){const p=box(g,.4,.39,.16,x,.72,-.13,m,.08);p.rotation.set(-.22,0,rz);}
       break;
     }
@@ -143,20 +158,20 @@ export function createModel(def, overrideColor) {
     }
     case 'coffee':{
       const m=material(color,'wood');
-      const topmesh=cyl(g,.5,.5,.065,0,.365,0,m,64);topmesh.scale.set(1.35,1,.75);
+      const topmesh=cyl(g,.5,.5,.065,0,.365,0,part('top',color,'wood'),64);topmesh.scale.set(1.35,1,.75);
       for(const x of [-.36,.36]){const p=cyl(g,.12,.15,.32,x,.17,0,m,32);p.scale.z=1.8;}
       break;
     }
     case 'side':{
-      const m=material(color,'marble');cyl(g,.225,.225,.055,0,.47,0,m);cyl(g,.12,.15,.44,0,.22,0,m);
+      const m=material(color,'marble');cyl(g,.225,.225,.055,0,.47,0,part('top',color,'marble'));cyl(g,.12,.15,.44,0,.22,0,m);
       for(let i=0;i<24;i++){const a=i/24*Math.PI*2;cyl(g,.008,.009,.4,Math.sin(a)*.13,.22,Math.cos(a)*.13,m,6);}break;
     }
     case 'dining':{
-      const m=material(color,'wood');cyl(g,.7,.7,.065,0,.727,0,m,64);cyl(g,.23,.28,.7,0,.35,0,m);
+      const m=material(color,'wood');cyl(g,.7,.7,.065,0,.727,0,part('top',color,'wood'),64);cyl(g,.23,.28,.7,0,.35,0,m);
       for(let i=0;i<36;i++){const a=i/36*Math.PI*2;cyl(g,.012,.013,.64,Math.sin(a)*.25,.35,Math.cos(a)*.25,m,6);}break;
     }
     case 'desk':{
-      const m=material(color,'wood');box(g,1.4,.06,.65,0,.73,0,m);legs(g,1.2,.48,.7,m);box(g,.45,.13,.54,.38,.63,0,m);box(g,.12,.01,.018,.38,.65,.28,metal);break;
+      const m=material(color,'wood');box(g,1.4,.06,.65,0,.73,0,part('top',color,'wood'));legs(g,1.2,.48,.7,m);box(g,.45,.13,.54,.38,.63,0,m);box(g,.12,.01,.018,.38,.65,.28,metal);break;
     }
     case 'shelf':{
       const m=material(color,'wood');
@@ -167,7 +182,7 @@ export function createModel(def, overrideColor) {
     }
     case 'console': case 'dresser': case 'nightstand': case 'wardrobe':{
       const [w,h,d]=def.size,m=material(color,'wood');
-      legs(g,w-.18,d-.12,.12,black);box(g,w,h-.13,d,0,(h+.13)/2,0,m,.016);
+      legs(g,w-.18,d-.12,.12,black);box(g,w,h-.13,d,0,(h+.13)/2,0,part('frame',color,'wood'),.016);
       if(def.model==='dresser'||def.model==='nightstand'){
         const count=def.model==='dresser'?3:2;
         for(let i=0;i<count;i++){const y=.14+(h-.13)/count*(i+.5);box(g,w-.035,(h-.16)/count-.018,.025,0,y,d/2+.008,m,.005);box(g,w*.22,.014,.025,0,y,d/2+.03,metal,.005);}
@@ -200,37 +215,37 @@ export function createModel(def, overrideColor) {
     case 'tasklamp':{
       cyl(g,.13,.13,.025,0,.014,0,body);tube(g,[0,.02,0],[0,.35,0],.013,body);tube(g,[0,.35,0],[.14,.5,0],.012,body);cyl(g,.045,.1,.1,.14,.48,0,body);break;
     }
-    case 'plant': plant(g,color);break;
-    case 'smallplant': plant(g,color,true);break;
-    case 'monstera': plant(g,color,false,true);break;
+    case 'plant': plant(g,color,false,false,part);break;
+    case 'smallplant': plant(g,color,true,false,part);break;
+    case 'monstera': plant(g,color,false,true,part);break;
     case 'vase':{
       const points=[[.0,0],[.065,0],[.09,.04],[.105,.13],[.09,.22],[.045,.28],[.042,.34],[.028,.34],[.03,.28],[.07,.2]].map(p=>new C.Vector2(...p));
-      mesh(g,new C.LatheGeometry(points,40),material(color,'ceramic'));
+      mesh(g,sharedGeometry('vase-lathe',()=>new C.LatheGeometry(points,40)),material(color,'ceramic'));
       torus(g,.035,.007,0,.34,0,material(color,'ceramic'),Math.PI/2);break;
     }
     case 'books':{
       const colors=['#b9ad8f','#637163','#ae7d60','#e0d4ba','#6e6b5d'];
-      for(let i=0;i<5;i++){const h=.23+(i%3)*.028,x=(i-2)*.067;box(g,.06,h,.17,x,h/2,0,material(colors[i]),.003);box(g,.048,h-.018,.16,x,h/2,.006,material('#e1d6bc'),.001);box(g,.06,h,.012,x,h/2,.085,material(colors[i]),.002);for(let l=0;l<2;l++)box(g,.04,.004,.002,x,h*.7-l*.02,.092,material('#d4c8ad'),0);}
+      for(let i=0;i<5;i++){const h=.23+(i%3)*.028,x=(i-2)*.067;box(g,.06,h,.17,x,h/2,0,part('body',colors[i],'matte'),.003);box(g,.048,h-.018,.16,x,h/2,.006,part('pages','#e1d6bc','matte'),.001);box(g,.06,h,.012,x,h/2,.085,part('body',colors[i],'matte'),.002);for(let l=0;l<2;l++)box(g,.04,.004,.002,x,h*.7-l*.02,.092,material('#d4c8ad'),0);}
       break;
     }
     case 'bookstack':{
       for(let i=0;i<3;i++){const o=box(g,.32,.04,.24,0,.02+i*.043,0,material(['#92826a','#b3a58b','#d2c4a8'][i]),.004,i*.1);box(o,.3,.025,.231,0,0,.007,material('#e6decc'),.001);}break;
     }
     case 'bowl':{
-      const p=[[0,0],[.07,0],[.13,.04],[.15,.09],[.142,.09],[.12,.05],[.06,.01]].map(v=>new C.Vector2(...v));mesh(g,new C.LatheGeometry(p,40),material(color,'ceramic'));break;
+      const p=[[0,0],[.07,0],[.13,.04],[.15,.09],[.142,.09],[.12,.05],[.06,.01]].map(v=>new C.Vector2(...v));mesh(g,sharedGeometry('bowl-lathe',()=>new C.LatheGeometry(p,40)),material(color,'ceramic'));break;
     }
     case 'candle':{
       cyl(g,.05,.05,.15,0,.075,0,material(color,'ceramic'));cyl(g,.044,.044,.01,0,.15,0,material('#e7d5aa'));ball(g,0,.17,0,.01,.025,.01,material('#ffcc70','glow'));break;
     }
     case 'mirror':{
-      box(g,.75,1.8,.05,0,.9,0,material(color,'metal'),.2);box(g,.69,1.73,.018,0,.9,.03,new C.MeshStandardMaterial({color:'#c1cdca',metalness:1,roughness:.02}),.19);break;
+      box(g,.75,1.8,.05,0,.9,0,material(color,'metal'),.2);box(g,.69,1.73,.018,0,.9,.03,part('glass','#c1cdca','mirror'),.19);break;
     }
     case 'art':{
       box(g,.9,1.15,.06,0,.575,0,wood,.008);box(g,.82,1.07,.012,0,.575,.035,material('#e7dfcc'),0);
       ball(g,-.12,.68,.05,.2,.25,.006,material(color));box(g,.25,.5,.008,.16,.4,.05,material('#797e64'),.002);ball(g,.12,.82,.06,.16,.16,.006,material('#c5a57b'));break;
     }
     case 'rug': case 'roundrug': case 'oval-rug':{
-      const m=new C.MeshStandardMaterial({map:makeTexture('rug',color),roughness:1,bumpMap:makeTexture('rug',color),bumpScale:.02});
+      const m=part('body',color,'rug');
       if(def.model==='rug'){
         box(g,3.1,.025,2.2,0,.018,0,m,.01);
         for(const side of [-1,1])for(let i=0;i<70;i++)box(g,.075,.012,.009,side*1.58,.016,-1.07+i*.031,material(color,'cloth'),0);
@@ -247,7 +262,7 @@ export function createModel(def, overrideColor) {
       for(let i=0;i<5;i++){box(g,.514,.77,.025,-1.07+i*.535,.48,.323,m,.006);box(g,.21,.014,.03,-1.07+i*.535,.78,.343,metal,.004);}
       box(g,.56,.018,.41,-.72,.96,0,material('#767a71','metal'),.045);box(g,.47,.011,.32,-.72,.968,0,material('#414b44'),.04);
       tube(g,[-.72,.96,-.2],[-.72,1.2,-.2],.016,metal);tube(g,[-.72,1.2,-.2],[-.72,1.2,-.05],.016,metal);tube(g,[-.72,1.2,-.05],[-.72,1.16,-.05],.016,metal);
-      box(g,.73,.012,.5,.64,.963,0,black,.012);for(const x of [.43,.86])for(const z of [-.12,.12])torus(g,.078,.008,x,.977,z,material('#74776b','metal'),Math.PI/2);
+      box(g,.73,.012,.5,.64,.963,0,part('cooktop','#36382f','metal'),.012);for(const x of [.43,.86])for(const z of [-.12,.12])torus(g,.078,.008,x,.977,z,material('#74776b','metal'),Math.PI/2);
       break;
     }
     case 'island':{
@@ -281,7 +296,7 @@ export function createModel(def, overrideColor) {
       const outer=ball(g,0,.32,0,.825,.3,.39,material(color,'ceramic'));
       const inner=ball(g,0,.49,0,.71,.12,.31,material('#d3d9cf','ceramic'));
       const rim=new C.Shape();rim.absellipse(0,0,.8,.37,0,Math.PI*2,false,0);const hole=new C.Path();hole.absellipse(0,0,.71,.29,0,Math.PI*2,true,0);rim.holes.push(hole);
-      mesh(g,new C.ExtrudeGeometry(rim,{depth:.035,bevelEnabled:true,bevelSize:.015,bevelThickness:.015,bevelSegments:2,steps:1}),white,0,.56,0,Math.PI/2);
+      mesh(g,sharedGeometry('bath-rim',()=>new C.ExtrudeGeometry(rim,{depth:.035,bevelEnabled:true,bevelSize:.015,bevelThickness:.015,bevelSegments:2,steps:1})),white,0,.56,0,Math.PI/2);
       tube(g,[.6,.05,-.45],[.6,.78,-.45],.018,metal);tube(g,[.6,.78,-.45],[.6,.78,-.24],.018,metal);break;
     }
     case 'vanity':{
@@ -296,13 +311,16 @@ export function createModel(def, overrideColor) {
       for(const x of [-.28,.28]){tube(g,[x,0,-.12],[x,.9,-.12],.014,metal);tube(g,[x,0,.12],[x,.9,-.12],.012,metal);}tube(g,[-.28,.89,-.12],[.28,.89,-.12],.014,metal);
       box(g,.4,.53,.025,0,.6,-.1,material('#ddd2bb','cloth'),.01);for(let i=0;i<14;i++)box(g,.008,.5,.027,-.18+i*.028,.6,-.085,material('#e6ddc8','cloth'),.003);break;
     }
-    default:if(!buildCollectionModel(g,def,{box,cyl,ball,tube,torus,legs,material,mesh,createModel,color}))throw new Error(`Unknown furniture model: ${def.model}`);
+    default:{const helpers={box,cyl,ball,tube,torus,legs,material,mesh,createModel:(nested,c)=>createModel(nested,c,appearance,undefined,false),part,color};if(!buildCollectionModel(g,def,helpers)&&!buildHobbyModel(g,def,helpers))throw new Error(`Unknown furniture model: ${def.model}`);}
   }
+  const parts=collectParts(g,def);
+  if(optimize)batchModel(g);
+  g.userData.appearanceParts=parts;
   if(def.fit){
     const bounds=new C.Box3().setFromObject(g),size=bounds.getSize(new C.Vector3()),center=bounds.getCenter(new C.Vector3());
     const scale=new C.Vector3(...def.size).divide(size);g.scale.copy(scale);
     g.position.set(-center.x*scale.x,-bounds.min.y*scale.y,-center.z*scale.z);
-    const fitted=new C.Group();fitted.add(g);fitted.userData.definition=def;return fitted;
+    const fitted=new C.Group();fitted.add(g);fitted.userData.definition=def;fitted.userData.appearanceParts=parts;return fitted;
   }
   g.userData.definition=def;
   return g;

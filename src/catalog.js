@@ -1,4 +1,6 @@
 import { EXTRA_ITEMS } from './collection.js';
+import {validateAppearance,PATTERNS} from './appearance.js';
+import {HOBBY_ITEMS} from './hobbies.js';
 
 export const CATEGORIES = [
   { id: 'all', name: 'All items' }, { id: 'seating', name: 'Seating' },
@@ -6,6 +8,7 @@ export const CATEGORIES = [
   { id: 'lighting', name: 'Lighting' }, { id: 'decor', name: 'Décor' },
   { id: 'rugs', name: 'Rugs' }, { id: 'kitchen', name: 'Kitchen' },
   { id: 'bedroom', name: 'Bedroom' }, { id: 'bathroom', name: 'Bathroom' },
+  { id: 'hobbies', name: 'Hobbies' },
 ];
 
 const item = (id, name, category, model, color, size, extra = {}) => ({ id, name, category, model, color, size, ...extra });
@@ -62,6 +65,7 @@ export const CATALOG = [
   item('shower', 'Rain walk-in shower', 'bathroom', 'shower', '#b2a68f', [.95, 2.15, .95], { finish: 'Glass & brass' }),
   item('towelrack', 'Everyday towel rail', 'bathroom', 'towelrack', '#9e927b', [.6, .9, .3], { finish: 'Brass & cotton' }),
   ...EXTRA_ITEMS,
+  ...HOBBY_ITEMS,
 ];
 
 export const SWATCHES = ['#7c8060', '#dfd3bd', '#e4dac9', '#ad674b', '#53595a', '#8d9a9d', '#bba38d', '#634832', '#d4c3a2', '#464b3d'];
@@ -153,6 +157,8 @@ export function validateDesign(value) {
   const color = c => typeof c === 'string' && /^#[\da-f]{6}$/i.test(c);
   const ids = new Set();
   for (const i of value.items) {
+    validateAppearance(i.appearance);
+    if(i.pattern!==undefined&&(!PATTERNS.includes(i.pattern)||CATALOG.find(c=>c.id===i.catalogId)?.model!=='rug'))throw new Error('Unsupported rug pattern.');
     if (!CATALOG.some(c => c.id === i.catalogId) || typeof i.uid !== 'string' || ids.has(i.uid) || ![i.x,i.y,i.z,i.rotation,i.scale].every(finite) || i.scale < .3 || i.scale > 3 || Math.abs(i.x) > 20 || Math.abs(i.z) > 20 || i.y < 0 || i.y > 10 || !color(i.color)) throw new Error('This design contains unsupported items or positions.');
     ids.add(i.uid);
   }

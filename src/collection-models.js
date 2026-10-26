@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 
 export function buildCollectionModel(g, def, h) {
-  const {box,cyl,ball,tube,torus,legs,material,mesh,createModel}=h;
-  const color=h.color,wood=material(color,'wood'),fabric=material(color,'cloth'),body=material(color),
-    brass=material('#ab9469','metal'),dark=material('#3d443c','metal'),ivory=material('#e6dec9','cloth'),
-    ceramic=material('#e8e3d8','ceramic'),glass=material('#b6c5be','glass');
+  const {box,cyl,ball,tube,torus,legs,material,mesh,createModel,part}=h;
+  const color=h.color,wood=part('frame',color,'wood'),fabric=part('body',color,'cloth'),body=part('body',color,'matte'),
+    brass=part('hardware','#ab9469','metal'),dark=part('frame','#3d443c','metal'),ivory=part('accent','#e6dec9','cloth'),
+    ceramic=part('ceramic','#e8e3d8','ceramic'),glass=part('glass','#b6c5be','glass');
   const [w,height,d]=def.size;
   switch(def.model){
     case 'sectional': case 'chaise': {
@@ -33,7 +33,7 @@ export function buildCollectionModel(g, def, h) {
     }
     case 'padded-bench':legs(g,w-.18,d-.12,.38,wood);box(g,w,.12,d,0,.43,0,fabric,.055);break;
     case 'rect-table':case 'trestle':{
-      box(g,w,.065,d,0,height-.033,0,wood,.02);
+      box(g,w,.065,d,0,height-.033,0,part('top',color,'wood'),.02);
       if(def.model==='trestle')for(const x of [-w*.35,w*.35]){tube(g,[x,0,-d*.42],[x,height-.06,0],.035,wood);tube(g,[x,0,d*.42],[x,height-.06,0],.035,wood);tube(g,[x,height*.4,-d*.25],[x,height*.4,d*.25],.02,wood);}
       else legs(g,w-.2,d-.17,height-.065,wood);break;
     }
@@ -116,7 +116,7 @@ export function buildCollectionModel(g, def, h) {
     case 'dressing-table':box(g,1.1,.055,.45,0,.73,0,wood,.018);legs(g,.95,.33,.7,wood);const mirror=cyl(g,.28,.28,.035,0,1.08,-.17,brass);mirror.rotation.x=Math.PI/2;const face=cyl(g,.26,.26,.015,0,1.08,-.146,material('#bac7c0','metal'));face.rotation.x=Math.PI/2;break;
     case 'blanket':for(let i=0;i<4;i++)box(g,.65,.03,.45,0,.015+i*.03,0,fabric,.015);for(let i=0;i<35;i++)tube(g,[-.31+i*.018,.08,.22],[-.31+i*.018,.06,.26],.003,ivory);break;
     case 'double-vanity':{
-      box(g,1.5,.55,.5,0,.5,0,wood,.02);box(g,1.55,.045,.53,0,.8,0,ceramic,.015);
+      box(g,1.5,.55,.5,0,.5,0,wood,.02);box(g,1.55,.045,.53,0,.8,0,part('top','#e8e3d8','ceramic'),.015);
       for(const x of [-.38,.38]){ball(g,x,.85,0,.27,.065,.18,ceramic);tube(g,[x,.82,-.2],[x,1.04,-.2],.012,brass);tube(g,[x,1.04,-.2],[x,1.04,-.07],.012,brass);box(g,.025,.12,.02,x,.51,.26,brass,.006);}break;
     }
     case 'pedestal-sink':cyl(g,.12,.17,.7,0,.35,0,ceramic);ball(g,0,.8,0,.25,.07,.22,ceramic);tube(g,[0,.8,-.15],[0,.99,-.15],.012,brass);tube(g,[0,.99,-.15],[0,.99,0],.012,brass);break;

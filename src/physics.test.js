@@ -13,4 +13,9 @@ test('books fit between open shelves',()=>{const w=createWorld(10,8),s=body('she
 test('a removed support lets a sleeping object fall',()=>{const w=createWorld(10,8),t=body('table-oak'),v=body('vase',0,1.5);w.addBody(t);w.addBody(v);settle(w);w.removeBody(t);v.wakeUp();settle(w);assert.ok(Math.abs(v.position.y)<.025);});
 test('furniture placement rejects intersecting solid furniture',()=>{const w=createWorld(10,8),a=body('sofa-olive'),b=body('sofa-sand',.4,0,.1);w.addBody(a);w.addBody(b);assert.equal(canPlaceBody(w,b,[a]),false);b.position.x=4;b.aabbNeedsUpdate=true;assert.equal(canPlaceBody(w,b,[a]),true);});
 test('every starter layout is a valid portable design',()=>{for(const l of LAYOUTS){const d={...DEFAULT_DESIGN(),layoutId:l.id,items:initialItems(l.id)};assert.equal(validateDesign(JSON.parse(JSON.stringify(d))).layoutId,l.id);}});
+test('the furnished loft settles completely so idle rendering can stop',()=>{
+  const world=createWorld(10,8),dynamic=[];
+  for(const item of initialItems('loft')){const definition=CATALOG.find(d=>d.id===item.catalogId),body=createBody(definition,item);if(body){world.addBody(body);if(definition.small)dynamic.push(body);}}
+  settle(world);assert.ok(dynamic.every(body=>body.sleepState===2));
+});
 test('import rejects unknown models, invalid colors and non-finite coordinates',()=>{const d=DEFAULT_DESIGN();d.items[0].catalogId='not-a-model';assert.throws(()=>validateDesign(d));const a=DEFAULT_DESIGN();a.items[0].x=NaN;assert.throws(()=>validateDesign(a));const b=DEFAULT_DESIGN();b.wallColor='invalid';assert.throws(()=>validateDesign(b));});

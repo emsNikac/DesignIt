@@ -22,12 +22,20 @@ export function createBody(def, item) {
   const s=item.scale;
   const body = new CANNON.Body({mass:def.small?.4:0,allowSleep:true,sleepSpeedLimit:.08,sleepTimeLimit:.7,linearDamping:.6,angularDamping:.8});
   const add=(w,h,d,x=0,y=h/2,z=0)=>body.addShape(new CANNON.Box(new CANNON.Vec3(w*s/2,h*s/2,d*s/2)),new CANNON.Vec3(x*s,y*s,z*s));
-  if(def.model==='wall-shelf'){
+  if(def.model==='smallplant'){
+    // Foliage is flexible: collide with the pot, not a solid box around leaves.
+    // The old box wedged against the next shelf and never allowed sleep.
+    add(.13,.12,.13,0,.06);
+  }else if(def.model==='wall-shelf'){
     const[w,h,d]=def.size;add(w,.035,d,0,h-.0175);
   }else if(def.model==='shelf') {
     for(const x of [-.77,0,.77])add(.055,2,.36,x,1);
     for(let i=0;i<5;i++)add(1.6,.045,.36,0,.43+i*.46);
     for(const x of [-.67,.67])add(.08,.41,.3,x,.205);
+  }else if(['book-cart','supply-cart','bakers-rack','grow-stand'].includes(def.model)){
+    const[w,h,d]=def.size,levels=def.model==='bakers-rack'?4:3;
+    for(const x of [-w*.44,w*.44])for(const z of [-d*.4,d*.4])add(.04,h,.04,x,h/2,z);
+    for(let i=0;i<levels;i++)add(w,.035,d,0,.12+i*(h-.25)/(levels-1));
   }else if(['open-shelf','ladder-shelf','cube-shelf','shoe-rack','glass-cabinet'].includes(def.model)){
     const[w,h,d]=def.size;
     const levels=def.model==='shoe-rack'?2:def.model==='cube-shelf'?3:def.model==='ladder-shelf'?5:def.model==='glass-cabinet'?3:Math.max(2,Math.round(h/.4));
