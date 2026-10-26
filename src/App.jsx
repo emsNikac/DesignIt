@@ -3,6 +3,7 @@ import { ArrowDownToLine, ArrowRight, Armchair, Box, Camera, Check, ChevronDown,
 import { CATALOG, CATEGORIES, SWATCHES, WALL_COLORS, FLOOR_TYPES, LAYOUTS, makeItem, validateDesign } from './catalog.js';
 import { DesignScene } from './scene.js';
 import CatalogThumbnail from './CatalogThumbnail.jsx';
+import {acquireThumbnails} from './thumbnails.js';
 import CategoryTabs from './CategoryTabs.jsx';
 import {itemDefinition,fitWallDimensions} from './architecture.js';
 import {FINISHES,PATTERNS} from './appearance.js';
@@ -61,6 +62,7 @@ function App(){
   const [selectedId,setSelectedId]=useState(null),[view,setView]=useState('orbit'),[mode,setMode]=useState('navigate'),[grid,setGrid]=useState(false),[snap,setSnap]=useState(true),[walls,setWalls]=useState(true);
   const selectItem=useCallback(uid=>{setSelectedId(uid);setMode(current=>uid?(current==='move'?'move':'select'):'navigate');},[]);
   const [loading,setLoading]=useState(true),[renderError,setRenderError]=useState(''),[toast,setToast]=useState(''),[saveStatus,setSaveStatus]=useState('saved');
+  const [rendererVersion,setRendererVersion]=useState(0);
   const [help,setHelp]=useState(false),[spaces,setSpaces]=useState(false),[exportOpen,setExportOpen]=useState(false),[lightOpen,setLightOpen]=useState(false),[intro,setIntro]=useState(!readStorage('forma-onboarded',false));
   const [past,setPast]=useState([]),[future,setFuture]=useState([]),[inspectorTab,setInspectorTab]=useState('appearance');
   const [lookState,setLookState]=useState('paused'),[spacesTab,setSpacesTab]=useState('saved');
@@ -68,6 +70,7 @@ function App(){
   const [partOptions,setPartOptions]=useState([]);
   const [graphics,setGraphics]=useState(()=>{try{return loadGraphics(localStorage);}catch{return DEFAULT_GRAPHICS;}});
   const initialGraphics=useRef(graphics);
+  initialGraphics.current=graphics;
   const [newLayout,setNewLayout]=useState('loft'),[newName,setNewName]=useState('');
   const [savedDesigns,setSavedDesigns]=useState(()=>{try{return readLibrary(localStorage).designs;}catch{return [];}});
   const mountRef=useRef(null),engineRef=useRef(null),toastTimer=useRef(null),uploadRef=useRef(null),headerRef=useRef(null);
@@ -97,16 +100,19 @@ function App(){
   })}),history),[change]);
   const undo=useCallback(()=>{setPast(p=>{if(!p.length)return p;const previous=p[p.length-1];setFuture(f=>[designRef.current,...f]);designRef.current=previous;setDesign(previous);return p.slice(0,-1);});},[]);
   const redo=useCallback(()=>{setFuture(f=>{if(!f.length)return f;const next=f[0];setPast(p=>[...p,designRef.current]);designRef.current=next;setDesign(next);return f.slice(1);});},[]);
+  useEffect(()=>acquireThumbnails(),[]);
   useEffect(()=>{
+    let engine;
     try{
-      const engine=new DesignScene(mountRef.current,{
+      engine=new DesignScene(mountRef.current,{
         onSelect:selectItem,onMove:(uid,pos)=>updateItem(uid,pos,false),onDragStart:checkpoint,
+        onRenderStatus:status=>{setLoading(false);setRenderError(status==='ready'?'':'Your device interrupted the 3D view. Your design is safe. Restore the view or choose lighter graphics settings.');},
         onPhysics:(uid,pos)=>{if(designRef.current.kind!=='demo'&&designRef.current.items.some(i=>i.uid===uid))updateItem(uid,pos,false);},onView:setView,onLookState:setLookState,onPartSelect:setSelectedPart,
       },initialGraphics.current);
-      engineRef.current=engine;engine.setDesign(designRef.current);setLoading(false);
-      return ()=>{engine.dispose();clearTimeout(toastTimer.current);};
-    }catch(e){console.error(e);setRenderError('Your browser could not start the 3D renderer. Enable hardware acceleration and refresh to enter the studio.');setLoading(false);}
-  },[updateItem,checkpoint,selectItem]);
+      engineRef.current=engine;engine.setDesign(designRef.current);engine.setGrid(grid);engine.setSnap(snap);engine.setWalls(walls);engine.setMode(mode);setLoading(false);
+      return ()=>{engineRef.current=null;engine.dispose();clearTimeout(toastTimer.current);};
+    }catch(e){engine?.dispose();engineRef.current=null;console.error(e);setRenderError('Your browser could not start the 3D renderer. Enable hardware acceleration, then restore the view to try again.');setLoading(false);}
+  },[updateItem,checkpoint,selectItem,rendererVersion]);
   useEffect(()=>{engineRef.current?.setDesign(design);setSaveStatus('saving');const timer=setTimeout(()=>{
     try{setSavedDesigns(saveWorkspace(localStorage,design).designs);setSaveStatus('saved');}catch{setSaveStatus('failed');}
   },650);return()=>clearTimeout(timer);},[design]);
@@ -159,7 +165,7 @@ function App(){
   const selectLayout=id=>{if(activateDesign({...createDemo(id),favoriteIds:design.favoriteIds}))notify('Demo opened. Your changes will save as a personal copy.');};
   const startBlank=()=>{if(activateDesign({...createBlankDesign(newLayout,newName),favoriteIds:design.favoriteIds}))notify('An empty canvas. Make yourself at home.');};
   const download=(content,name,type)=>{const url=typeof content==='string'&&content.startsWith('data:')?content:URL.createObjectURL(new Blob([content],{type}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();if(!url.startsWith('data:'))setTimeout(()=>URL.revokeObjectURL(url),2000);};
-  const exportImage=async()=>{if(!engineRef.current)return;const image=await engineRef.current.snapshot();download(image,`forma-${design.layoutId}.png`);setExportOpen(false);notify('Your space, captured. Image downloaded.');};
+  const exportImage=async()=>{if(!engineRef.current)return;const image=await engineRef.current.snapshot();if(!image){notify('Restore the 3D view before exporting an image.');return;}download(image,`forma-${design.layoutId}.png`);setExportOpen(false);notify('Your space, captured. Image downloaded.');};
   const exportDesign=()=>{download(JSON.stringify(design,null,2),`forma-${design.layoutId}.json`,'application/json');setExportOpen(false);notify('Design downloaded. Bring it back any time.');};
   const importDesign=async e=>{const file=e.target.files?.[0];if(!file)return;try{if(file.size>2e6)throw new Error('Please choose a design smaller than 2 MB.');const imported=personalCopy(validateDesign(JSON.parse(await file.text())));activateDesign(imported);notify('Welcome back. Your design is ready.');}catch(err){notify(err instanceof SyntaxError?'That file could not be read. Choose a Forma JSON design.':err.message);}e.target.value='';setExportOpen(false);};
   const dismissIntro=()=>{setIntro(false);try{localStorage.setItem('forma-onboarded','true');}catch{}};
@@ -194,7 +200,7 @@ function App(){
         <div className="stage-heading"><div className="eyebrow">YOUR CANVAS, YOUR RULES</div><button className="layout-title" onClick={()=>openSpaces()}>{layout.name}<ChevronDown size={19}/></button><div className="layout-meta"><span>{layout.area} m²</span><span className="meta-dot"/><span>{layout.style}</span><span className="meta-dot"/><span className="free-tag">{design.kind==='demo'?'Demo home':'Your design'}</span></div></div>
         <div className="stage-top-tools"><button className="lighting-chip" onClick={()=>setLightOpen(!lightOpen)} aria-expanded={lightOpen}>{design.time>19||design.time<6?<Moon size={16}/>:<Sun size={17}/>}<span>{formatTime(design.time)}</span><ChevronDown size={12}/></button><IconButton label="Expand studio fullscreen" className="stage-button" onClick={()=>{if(document.fullscreenElement)document.exitFullscreen?.();else document.documentElement.requestFullscreen?.().catch(()=>notify('Fullscreen is unavailable in this view.'));}}><Expand size={18}/></IconButton></div>
         <div ref={mountRef} className="scene-canvas" role="application" aria-label="Interactive 3D apartment. Drag to orbit the view. Click an item to select it, then use Move to reposition it. Use the catalog to add items. Scroll to zoom. Use the view controls for a floor plan or walkthrough."/>
-        {(loading||renderError)&&<div className="scene-loading">{loading?<><LoaderCircle className="spin" size={30}/><h3>Making room for you…</h3></>:<><Box size={30}/><h3>The studio needs WebGL</h3><p>{renderError}</p><button className="button" onClick={()=>location.reload()}>Try again</button></>}</div>}
+        {(loading||renderError)&&<div className={cn('scene-loading',renderError&&'render-interrupted')}>{loading?<><LoaderCircle className="spin" size={30}/><h3>Making room for you…</h3></>:<><Box size={30}/><h3>The 3D view needs a fresh start</h3><p>{renderError}</p><button className="button" onClick={()=>{selectItem(null);setView('orbit');setRenderError('');setLoading(true);setRendererVersion(value=>value+1);}}>Restore 3D view</button></>}</div>}
         {lightOpen&&<div className="lighting-popover popover"><IconButton className="popover-close" label="Close light controls" onClick={()=>setLightOpen(false)}><X size={16}/></IconButton>{lightControls(true)}</div>}
         {view==='walk'&&<>
           {['locked','soft'].includes(lookState)?<div className="walk-crosshair" aria-hidden="true"/>:<div className="walk-start"><Footprints size={21}/><strong>{lookState==='fallback'?'Explore at your own pace':'Step inside your space'}</strong><p>{lookState==='fallback'?'Move the mouse over the room to look around. W A S D to walk, Esc to pause. Touch players can drag to look.':'Click to look around with your mouse. W A S D to walk. Press Esc to free the cursor.'}</p><button className="button primary" onClick={()=>lookState==='fallback'?engineRef.current?.enableFallbackLook():engineRef.current?.captureMouse()}>{lookState==='fallback'?'Use mouse-look':'Start exploring'} <ArrowRight size={14}/></button></div>}

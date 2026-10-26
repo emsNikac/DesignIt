@@ -12,6 +12,15 @@ test('the new open shelving supports books inside its frame',()=>{const w=create
 test('books fit between open shelves',()=>{const w=createWorld(10,8),s=body('shelf-oak'),b=body('books',-.38,1.55);w.addBody(s);w.addBody(b);settle(w);const shelfTop=.43+2*.46+.045/2;assert.ok(Math.abs(b.position.y-shelfTop)<.01,`height ${b.position.y}`);});
 test('a removed support lets a sleeping object fall',()=>{const w=createWorld(10,8),t=body('table-oak'),v=body('vase',0,1.5);w.addBody(t);w.addBody(v);settle(w);w.removeBody(t);v.wakeUp();settle(w);assert.ok(Math.abs(v.position.y)<.025);});
 test('furniture placement rejects intersecting solid furniture',()=>{const w=createWorld(10,8),a=body('sofa-olive'),b=body('sofa-sand',.4,0,.1);w.addBody(a);w.addBody(b);assert.equal(canPlaceBody(w,b,[a]),false);b.position.x=4;b.aabbNeedsUpdate=true;assert.equal(canPlaceBody(w,b,[a]),true);});
+test('dining chairs can tuck under a table while their backrests still collide',()=>{
+  const world=createWorld(10,8),table=body('design-table-four-leg-rectangle');
+  const chair=createBody(CATALOG.find(d=>d.id==='design-chair-wishbone'),makeItem('design-chair-wishbone',0,.65,Math.PI));
+  world.addBody(table);world.addBody(chair);assert.equal(canPlaceBody(world,chair,[table]),true);
+  chair.position.z=.1;chair.aabbNeedsUpdate=true;assert.equal(canPlaceBody(world,chair,[table]),false);
+});
+test('the new dining-chair seat supports small decor',()=>{
+  const world=createWorld(10,8),chair=body('design-chair-spindle'),vase=body('vase',0,.8,0);world.addBody(chair);world.addBody(vase);settle(world);assert.ok(vase.position.y>.47&&vase.position.y<.51,`height ${vase.position.y}`);
+});
 test('every starter layout is a valid portable design',()=>{for(const l of LAYOUTS){const d={...DEFAULT_DESIGN(),layoutId:l.id,items:initialItems(l.id)};assert.equal(validateDesign(JSON.parse(JSON.stringify(d))).layoutId,l.id);}});
 test('the furnished loft settles completely so idle rendering can stop',()=>{
   const world=createWorld(10,8),dynamic=[];

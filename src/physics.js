@@ -18,14 +18,31 @@ export function createWorld(width, depth, partitions) {
   return world;
 }
 
-export function createBody(def, item) {
+export function createBody(def, item,collisionBoxes) {
   def=itemDefinition(def,item);
   if(def.rug || def.ceiling || (def.wall&&!def.wallSupport)) return null;
   const s=item.scale;
   const body = new CANNON.Body({mass:def.small?.4:0,allowSleep:true,sleepSpeedLimit:.08,sleepTimeLimit:.7,linearDamping:.6,angularDamping:.8});
   const add=(w,h,d,x=0,y=h/2,z=0)=>body.addShape(new CANNON.Box(new CANNON.Vec3(w*s/2,h*s/2,d*s/2)),new CANNON.Vec3(x*s,y*s,z*s));
-  if(def.architecture){
+  if(collisionBoxes?.length&&!def.small){
+    for(const box of collisionBoxes)add(...box.size,...box.center);
+  }else if(def.architecture){
     for(const b of wallSections(def))add(b.width,b.height,b.depth,b.x,b.y,b.z);
+  }else if(['design-chair','diningchair','cane-chair'].includes(def.model)){
+    const[w,h,d]=def.size;add(w*.92,.07,d*.85,0,.46);
+    add(w*.84,Math.max(.1,h-.52),.065,0,(h+.52)/2,-d*.36);
+    for(const x of [-w*.39,w*.39])for(const z of [-d*.34,d*.34])add(.035,.43,.035,x,.215,z);
+    if(def.design?.arms)for(const x of [-w*.47,w*.47])add(.04,.04,d*.55,x,.68);
+  }else if(def.tableSupport){
+    const[w,h,d]=def.size;add(w,.07,d,0,h-.035);for(const x of [-w*.35,w*.35])add(.06,h-.07,d*.65,x,(h-.07)/2);
+  }else if(def.shelfSupport){
+    const[w,h,d]=def.size,levels=['low','wall'].includes(def.design?.form)?2:4;
+    if(def.design?.form==='stepped'){
+      for(let i=0;i<4;i++){const height=h*(i+1)/4,x=-w/2+(i+.5)*w/4;for(const xx of [x-w/8,x+w/8])add(.035,height,d,xx,height/2);for(let j=0;j<=i+1;j++)add(w/4,.035,d,x,j*height/(i+1));}
+    }else if(def.design?.form==='corner'){
+      for(const[x,z]of[[-w/2,-d/2],[w/2,-d/2],[-w/2,d/2]])add(.045,h,.045,x,h/2,z);
+      for(let i=0;i<=levels;i++){const y=.03+i*(h-.06)/levels;add(w,.035,d*.48,0,y,-d*.26);add(w*.48,.035,d,-w*.26,y,0);}
+    }else{for(const x of [-w/2+.02,w/2-.02])add(.04,h,d,x,h/2);for(let i=0;i<=levels;i++)add(w,.035,d,0,.025+i*(h-.05)/levels);}
   }else if(def.model==='smallplant'){
     // Foliage is flexible: collide with the pot, not a solid box around leaves.
     // The old box wedged against the next shelf and never allowed sleep.

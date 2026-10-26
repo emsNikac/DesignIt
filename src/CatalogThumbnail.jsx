@@ -8,8 +8,8 @@ export default function CatalogThumbnail({item}){
     let cancel=()=>{};
     const request=()=>{cancel=requestThumbnail(item,setUrl);};
     if(!('IntersectionObserver' in window)){request();return()=>cancel();}
-    const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();request();}},{rootMargin:'200px'});
+    const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))request();else{cancel();setUrl('');}},{root:ref.current.closest('.catalog-scroll'),rootMargin:'150px'});
     observer.observe(ref.current);return()=>{observer.disconnect();cancel();};
   },[item]);
-  return <span className="catalog-thumbnail" ref={ref}>{url?<img src={url} alt={item.name}/>:<Armchair size={35} className="placeholder-icon"/>}</span>;
+  return <span className="catalog-thumbnail" ref={ref}>{url?<img src={url} alt={item.name} loading="lazy" decoding="async"/>:<Armchair size={35} className="placeholder-icon"/>}</span>;
 }

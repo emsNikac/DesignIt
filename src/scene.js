@@ -22,6 +22,7 @@ export class DesignScene {
     this.container=container;this.callbacks=callbacks;this.objects=new Map();this.keys=new Set();this.mode='navigate';this.view='orbit';this.snap=true;this.wallVisible=true;this.disposed=false;this.dirty=true;this.shadowDirty=true;this.lastRender=0;this.frameLimit=60;
     this.scene=new THREE.Scene();this.scene.background=new THREE.Color('#eeeee7');
     this.renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true,alpha:false,powerPreference:'high-performance'});
+    try{
     this.graphics=normalizeGraphics(graphics);
     this.renderer.setPixelRatio(Math.min(devicePixelRatio,this.graphics.pixelRatio));this.renderer.shadowMap.enabled=this.graphics.shadows>0;this.renderer.shadowMap.type=THREE.PCFSoftShadowMap;this.renderer.shadowMap.autoUpdate=false;
     this.renderer.toneMapping=THREE.ACESFilmicToneMapping;this.renderer.toneMappingExposure=1.3;this.renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -33,7 +34,7 @@ export class DesignScene {
     this.sun=new THREE.DirectionalLight('#fff3d7',4.5);this.sun.position.set(-4,8,-6);this.sun.castShadow=true;this.sun.shadow.mapSize.set(2048,2048);this.sun.shadow.camera.left=-11;this.sun.shadow.camera.right=11;this.sun.shadow.camera.top=11;this.sun.shadow.camera.bottom=-11;this.sun.shadow.camera.near=.5;this.sun.shadow.camera.far=40;this.sun.shadow.normalBias=.025;this.sun.shadow.bias=-.00008;this.sun.shadow.radius=3;this.scene.add(this.sun);this.scene.add(this.sun.target);
     this.fill=new THREE.DirectionalLight('#eef0dd',.55);this.fill.position.set(5,6,7);this.scene.add(this.fill);
     this.warmLight=new THREE.PointLight('#ffd99d',0,12,2);this.warmLight.position.set(-1,2,0);this.scene.add(this.warmLight);
-    const pmrem=new THREE.PMREMGenerator(this.renderer);const env=new RoomEnvironment();this.envTarget=pmrem.fromScene(env,.04);this.scene.environment=this.envTarget.texture;this.scene.environmentIntensity=.55;env.dispose();pmrem.dispose();
+    this.rebuildEnvironment();this.scene.environmentIntensity=.55;
     const ground=new THREE.Mesh(new THREE.PlaneGeometry(200,200),new THREE.MeshStandardMaterial({color:'#eaeae3',roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.27;ground.receiveShadow=true;this.scene.add(ground);
     this.raycaster=new THREE.Raycaster();this.pointer=new THREE.Vector2();this.dragPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0);this.dragPoint=new THREE.Vector3();
     this.selection=new THREE.Box3Helper(new THREE.Box3(), '#7d9364');this.selection.visible=false;this.scene.add(this.selection);
@@ -43,6 +44,9 @@ export class DesignScene {
     this.ao=null;this.antialiasPass=null;this.outputPass=new OutputPass();this.composer.addPass(this.outputPass);
     this.applyGraphics(this.graphics);
     this.bindings=[];this.listen(this.controls,'change',()=>this.invalidate());
+    this.listen(this.renderer.domElement,'webglcontextlost',event=>{event.preventDefault();this.contextLost=true;this.releaseMouse();this.pointerUp();this.renderer.domElement.dataset.renderState='lost';this.callbacks.onRenderStatus?.('lost');});
+    this.listen(this.renderer.domElement,'webglcontextrestored',()=>this.restoreContext());
+    this.renderer.domElement.dataset.renderState='ready';
     this.walkLook={yaw:0,pitch:0};this.lookState='paused';
     this.listen(document,'pointerlockchange',()=>{
       const locked=document.pointerLockElement===this.renderer.domElement;
@@ -57,8 +61,15 @@ export class DesignScene {
     this.listen(document,'visibilitychange',()=>{if(document.hidden)this.releaseMouse();});
     this.resizeObserver=new ResizeObserver(()=>this.resize());this.resizeObserver.observe(container);this.resize();
     this.clock=new THREE.Clock();this.renderer.setAnimationLoop(()=>this.animate());
+    }catch(error){this.dispose();throw error;}
   }
   listen(target,event,fn,options){target.addEventListener(event,fn,options);this.bindings.push(()=>target.removeEventListener(event,fn,options));}
+  rebuildEnvironment(){const pmrem=new THREE.PMREMGenerator(this.renderer),env=new RoomEnvironment();this.envTarget?.dispose();this.envTarget=pmrem.fromScene(env,.04);this.scene.environment=this.envTarget.texture;env.dispose();pmrem.dispose();}
+  restoreContext(){
+    if(this.disposed)return;
+    try{this.rebuildEnvironment();this.sun.shadow.map?.dispose();this.sun.shadow.map=null;this.composer.reset();this.contextLost=false;this.renderFailed=false;this.applyGraphics(this.graphics);this.clock.getDelta();this.renderer.domElement.dataset.renderState='ready';this.callbacks.onRenderStatus?.('ready');this.invalidate(true);}
+    catch(error){this.renderFailed=true;this.callbacks.onRenderStatus?.('failed');console.error('Could not restore the 3D renderer.',error);}
+  }
   invalidate(shadows=false){this.dirty=true;this.shadowDirty=this.shadowDirty||shadows;}
   applyGraphics(value){
     this.graphics=normalizeGraphics(value);const settings=this.graphics;
@@ -154,7 +165,7 @@ export class DesignScene {
       }
       if(!o){
         const group=makeGroup();this.scene.add(group);
-        const body=createBody(def,item);if(body){this.world.addBody(body);if(def.small){body.addEventListener('sleep',()=>{if(this.dragging?.uid===item.uid)return;const current=this.objects.get(item.uid);if(!current)return;const y=Math.max(0,body.position.y);if(Math.abs(current.item.y-y)>.025||Math.abs(current.item.x-body.position.x)>.025||Math.abs(current.item.z-body.position.z)>.025)this.callbacks.onPhysics?.(item.uid,{x:body.position.x,y,z:body.position.z});});}}
+        const body=createBody(def,item,group.userData.collisionBoxes);if(body){this.world.addBody(body);if(def.small){body.addEventListener('sleep',()=>{if(this.dragging?.uid===item.uid)return;const current=this.objects.get(item.uid);if(!current)return;const y=Math.max(0,body.position.y);if(Math.abs(current.item.y-y)>.025||Math.abs(current.item.x-body.position.x)>.025||Math.abs(current.item.z-body.position.z)>.025)this.callbacks.onPhysics?.(item.uid,{x:body.position.x,y,z:body.position.z});});}}
         o={group,body,signature,shapeSignature,item,def};this.objects.set(item.uid,o);
       }
       if(this.dragging?.uid!==item.uid){
@@ -267,9 +278,9 @@ export class DesignScene {
     if(this.dragging){const o=this.objects.get(this.dragging.uid);if(o){if(o.body){o.body.mass=o.oldMass??o.body.mass;o.body.updateMassProperties();o.body.wakeUp();}this.callbacks.onMove(this.dragging.uid,{x:o.group.position.x,y:o.group.position.y,z:o.group.position.z});if(!o.def.small)for(const small of this.objects.values())if(small.def.small)small.body?.wakeUp();}}
     this.dragging=null;this.pendingDrag=null;this.controls.enabled=this.view!=='walk';this.setMode(this.mode);
   }
-  async snapshot(){this.selection.visible=false;this.grid.visible=false;this.renderer.shadowMap.needsUpdate=true;this.composer.render();const data=this.renderer.domElement.toDataURL('image/png');this.updateSelection();this.grid.visible=!!this.gridState;this.invalidate();return data;}
+  async snapshot(){if(this.contextLost||this.renderFailed||this.renderer.getContext().isContextLost())return null;this.selection.visible=false;this.grid.visible=false;this.renderer.shadowMap.needsUpdate=true;this.composer.render();const data=this.renderer.domElement.toDataURL('image/png');this.updateSelection();this.grid.visible=!!this.gridState;this.invalidate();return data;}
   animate(){
-    if(this.disposed)return;const dt=Math.min(this.clock.getDelta(),.05);
+    if(this.disposed||this.contextLost||this.renderFailed)return;const dt=Math.min(this.clock.getDelta(),.05);
     if(this.world&&[...this.objects.values()].some(o=>o.body?.mass>0&&o.body.sleepState!==2)){this.world.step(1/60,dt,3);this.invalidate(true);for(const o of this.objects.values())if(o.body?.mass>0&&this.dragging?.uid!==o.item.uid){o.group.position.copy(o.body.position);o.group.quaternion.copy(o.body.quaternion);}}
     if(this.view==='walk'){
       const active=this.lookState==='locked'||this.lookState==='soft';
@@ -285,7 +296,7 @@ export class DesignScene {
     }else this.controls.update();
     if(document.hidden||!this.dirty||performance.now()-this.lastRender<1000/this.frameLimit)return;
     this.updateSelection();if(this.shadowDirty){this.renderer.shadowMap.needsUpdate=true;this.shadowDirty=false;}
-    this.composer.render();this.dirty=false;this.lastRender=performance.now();
+    try{this.composer.render();this.dirty=false;this.lastRender=performance.now();}catch(error){this.renderFailed=true;this.releaseMouse();this.pointerUp();this.renderer.domElement.dataset.renderState='failed';this.callbacks.onRenderStatus?.('failed');console.error('The 3D renderer was interrupted.',error);}
   }
-  dispose(){this.releaseMouse();this.disposed=true;this.renderer.setAnimationLoop(null);this.resizeObserver.disconnect();this.bindings.forEach(fn=>fn());this.controls.dispose();this.objects.forEach(o=>this.removeObject(o));disposeOwnedGeometry(this.scene);this.sun.shadow.dispose();this.envTarget.dispose();this.composer.passes.forEach(p=>p.dispose?.());this.composer.dispose();this.renderer.dispose();this.renderer.domElement.remove();}
+  dispose(){this.releaseMouse();this.disposed=true;this.renderer.setAnimationLoop(null);this.resizeObserver?.disconnect();this.bindings?.forEach(fn=>fn());this.controls?.dispose();this.objects.forEach(o=>this.removeObject(o));disposeOwnedGeometry(this.scene);this.sun?.shadow.dispose();this.envTarget?.dispose();this.composer?.passes.forEach(p=>p.dispose?.());this.composer?.dispose();this.renderer.dispose();if(!this.renderer.getContext().isContextLost())this.renderer.forceContextLoss();this.renderer.domElement.remove();}
 }

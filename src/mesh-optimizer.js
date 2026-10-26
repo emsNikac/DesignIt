@@ -1,9 +1,10 @@
 import {Mesh,Matrix4,Box3} from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
+import {LruCache} from './lru-cache.js';
 
-const geometryCache=new Map();
+const geometryCache=new LruCache(32*1024*1024);
 export function sharedGeometry(key,build){
-  if(!geometryCache.has(key)){const geometry=build();geometry.userData.shared=true;geometryCache.set(key,geometry);}
+  if(!geometryCache.has(key)){const geometry=build();geometry.userData.shared=true;geometry.userData.cacheKey=key;const bytes=Object.values(geometry.attributes).reduce((n,a)=>n+a.array.byteLength,geometry.index?.array.byteLength||0);geometryCache.set(key,geometry,bytes);return geometry;}
   return geometryCache.get(key);
 }
 
@@ -37,4 +38,4 @@ export function batchModel(group){
   group.clear();group.add(...output);return group;
 }
 
-export function disposeOwnedGeometry(group){group.traverse(o=>{if(o.geometry&&!o.geometry.userData.shared)o.geometry.dispose();if(o.userData.ownedMaterial){o.material.map?.dispose();o.material.dispose();}});}
+export function disposeOwnedGeometry(group){group.traverse(o=>{if(o.geometry&&(!o.geometry.userData.shared||geometryCache.peek(o.geometry.userData.cacheKey)!==o.geometry))o.geometry.dispose();if(o.userData.ownedMaterial){o.material.map?.dispose();o.material.dispose();}});}

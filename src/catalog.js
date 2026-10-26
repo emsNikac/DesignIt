@@ -2,6 +2,7 @@ import { EXTRA_ITEMS } from './collection.js';
 import {validateAppearance,PATTERNS} from './appearance.js';
 import {HOBBY_ITEMS} from './hobbies.js';
 import {HOME_ITEMS} from './home-collection.js';
+import {DESIGN_ITEMS} from './design-collection.js';
 import {WALL_ITEMS,validWallDimensions} from './architecture.js';
 import {FLOOR_TYPES} from './floors.js';
 export {FLOOR_TYPES} from './floors.js';
@@ -73,6 +74,7 @@ export const CATALOG = [
   ...HOBBY_ITEMS,
   ...HOME_ITEMS,
   ...WALL_ITEMS,
+  ...DESIGN_ITEMS,
 ];
 
 export const SWATCHES = ['#7c8060', '#dfd3bd', '#e4dac9', '#ad674b', '#53595a', '#8d9a9d', '#bba38d', '#634832', '#d4c3a2', '#464b3d'];
