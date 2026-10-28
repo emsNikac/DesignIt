@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  server: {
+    allowedHosts: ['7ac7-77-28-18-193.ngrok-free.app'],
+  },
   build: {
     rollupOptions: {
       output: {
