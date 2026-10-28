@@ -1,3 +1,4 @@
+import {normalizeBathTile} from './tiles.js';
 import { EXTRA_ITEMS } from './collection.js';
 import {validateAppearance,PATTERNS} from './appearance.js';
 import {HOBBY_ITEMS} from './hobbies.js';
@@ -150,7 +151,7 @@ export function initialItems(layoutId = 'loft') {
   return base;
 }
 
-export const DEFAULT_DESIGN = () => ({ version: 1, name: 'A space of my own', layoutId: 'loft', wallColor: '#e8e4d9', floor: 'oak', bathTile: 'sage', time: 15.5, items: initialItems(), favoriteIds: ['sofa-olive', 'chair-cream', 'table-oak', 'plant-ficus'] });
+export const DEFAULT_DESIGN = () => ({ version: 1, name: 'A space of my own', layoutId: 'loft', wallColor: '#e8e4d9', floor: 'oak', bathTile: 'sage', time: 15.5, lightsOn: true, items: initialItems(), favoriteIds: ['sofa-olive', 'chair-cream', 'table-oak', 'plant-ficus'] });
 
 export function validateDesign(value) {
   if (!value || value.version !== 1 || !LAYOUTS.some(l => l.id === value.layoutId) || !Array.isArray(value.items) || value.items.length > 400) throw new Error('Please choose a valid Forma design file.');
@@ -165,5 +166,6 @@ export function validateDesign(value) {
     ids.add(i.uid);
   }
   if (!FLOOR_TYPES.some(f => f.id === value.floor) || !color(value.wallColor) || !finite(value.time) || value.time < 0 || value.time > 24) throw new Error('This design contains unsupported materials.');
-  return { ...value, name: String(value.name || 'Untitled space').slice(0, 80), favoriteIds: Array.isArray(value.favoriteIds) ? value.favoriteIds.filter(id => CATALOG.some(c => c.id === id)) : [], bathTile: ['sage','cream','terracotta','charcoal'].includes(value.bathTile) ? value.bathTile : 'sage' };
+  if(value.lightsOn!==undefined&&typeof value.lightsOn!=='boolean')throw new Error('Unsupported light switch state.');
+  return { ...value, lightsOn:value.lightsOn!==false, name: String(value.name || 'Untitled space').slice(0, 80), favoriteIds: Array.isArray(value.favoriteIds) ? value.favoriteIds.filter(id => CATALOG.some(c => c.id === id)) : [], bathTile: normalizeBathTile(value.bathTile) };
 }

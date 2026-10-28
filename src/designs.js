@@ -65,3 +65,12 @@ export function saveWorkspace(storage, design) {
   storage.setItem(LIBRARY_KEY, JSON.stringify(library));
   return library;
 }
+
+export function deleteSavedDesign(storage,designId){
+  const library=readLibrary(storage);
+  if(!library.designs.some(d=>d.designId===designId))throw new Error('This saved design could not be found.');
+  library.designs=library.designs.filter(d=>d.designId!==designId);
+  if(library.activeId===designId)library.activeId=library.designs[0]?.designId||'demo-loft';
+  storage.setItem(LIBRARY_KEY,JSON.stringify(library));
+  return library;
+}

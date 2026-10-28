@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createDemo,createBlankDesign,personalCopy,readLibrary,loadWorkspace,saveWorkspace,LIBRARY_KEY} from './designs.js';
+import {createDemo,createBlankDesign,personalCopy,readLibrary,loadWorkspace,saveWorkspace,deleteSavedDesign,LIBRARY_KEY} from './designs.js';
 import {LAYOUTS,DEFAULT_DESIGN,makeItem,validateDesign} from './catalog.js';
 
 const storage=()=>{const values=new Map();return {getItem:key=>values.get(key)??null,setItem:(key,value)=>values.set(key,value)};};
@@ -24,4 +24,10 @@ test('a damaged save does not hide other designs',()=>{
 });
 test('all furnished demos remain valid and include their editable artwork',()=>{
   for(const l of LAYOUTS){const d=createDemo(l.id);validateDesign(d);assert.ok(d.items.some(i=>i.catalogId==='art'));assert.ok(d.items.length>=10);}
+});
+test('deleting an inactive design preserves the active home; deleting the active one opens the remaining home',()=>{
+  const s=storage(),a=createBlankDesign('loft','One'),b=createBlankDesign('studio','Two'),c=createBlankDesign('apartment','Three');saveWorkspace(s,a);saveWorkspace(s,b);saveWorkspace(s,c);
+  deleteSavedDesign(s,a.designId);assert.equal(loadWorkspace(s).designId,c.designId);assert.equal(readLibrary(s).designs.length,2);
+  deleteSavedDesign(s,c.designId);assert.equal(loadWorkspace(s).designId,b.designId);saveWorkspace(s,loadWorkspace(s));assert.deepEqual(readLibrary(s).designs.map(d=>d.designId),[b.designId]);
+  deleteSavedDesign(s,b.designId);assert.equal(loadWorkspace(s).kind,'demo');assert.equal(readLibrary(s).designs.length,0);assert.throws(()=>deleteSavedDesign(s,'demo-loft'));assert.throws(()=>deleteSavedDesign(s,b.designId));
 });

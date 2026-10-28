@@ -1,6 +1,6 @@
 # Rendering optimization
 
-The default **Original** graphics preset keeps the existing appearance: a device pixel ratio capped at 1.75, 2048-pixel soft shadows, 12-sample GTAO with the same parameters, the same PBR materials, environment lighting, tone mapping, geometry and texture detail. High-quality SMAA edge smoothing is now enabled in Original; the prior geometry, materials, lighting and tone mapping remain. Lower quality is an explicit player choice.
+The default **Original** graphics preset keeps the existing appearance: a device pixel ratio capped at 1.75, 2048-pixel soft shadows, 12-sample GTAO with the same parameters, full PBR material, geometry and texture detail. Time-dependent lighting now includes the switchable interior sources described in [studio controls](studio-controls.md). High-quality SMAA edge smoothing is now enabled in Original; the prior furniture geometry and material detail remain. Lower quality is an explicit player choice.
 
 ## Changes independent of graphics quality
 

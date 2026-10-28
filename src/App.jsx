@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDownToLine, ArrowRight, Armchair, Box, Camera, Check, ChevronDown, CircleHelp, Copy, Download, Expand, Eye, Footprints, Grid2X2, Hand, Heart, House, Layers3, LayoutDashboard, LoaderCircle, Maximize, Minus, Moon, MousePointer2, Move, Paintbrush, Plus, Redo2, RotateCcw, RotateCw, Search, Settings2, Sparkles, Sun, Sunset, Trash2, Undo2, Upload, X } from 'lucide-react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDownToLine, ArrowRight, Armchair, Box, Camera, Check, ChevronDown, CircleHelp, Copy, Download, Expand, Eye, Footprints, Grid2X2, Hand, Heart, House, Layers3, LayoutDashboard, Lightbulb, LoaderCircle, Maximize, Minus, Moon, MousePointer2, Move, Paintbrush, Plus, Redo2, RotateCcw, RotateCw, Search, Settings2, Sparkles, Sun, Sunset, Trash2, Undo2, Upload, X } from 'lucide-react';
 import { CATALOG, CATEGORIES, SWATCHES, WALL_COLORS, FLOOR_TYPES, LAYOUTS, makeItem, validateDesign } from './catalog.js';
 import { DesignScene } from './scene.js';
 import CatalogThumbnail from './CatalogThumbnail.jsx';
@@ -8,14 +8,15 @@ import CategoryTabs from './CategoryTabs.jsx';
 import {itemDefinition,fitWallDimensions} from './architecture.js';
 import {FINISHES,PATTERNS} from './appearance.js';
 import {HOBBIES} from './hobbies.js';
-import {findPlacement} from './placement.js';
+import {findPlacement,itemElevation} from './placement.js';
+import {BATH_TILES,bathTileColor,isTileColor} from './tiles.js';
 import {GRAPHICS_KEY,GRAPHICS_PRESETS,DEFAULT_GRAPHICS,loadGraphics} from './graphics.js';
-import { createDemo, createBlankDesign, personalCopy, readLibrary, loadWorkspace, saveWorkspace } from './designs.js';
+import { createDemo, createBlankDesign, personalCopy, readLibrary, loadWorkspace, saveWorkspace, deleteSavedDesign } from './designs.js';
 
 const readStorage=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key))??fallback;}catch{return fallback;}};
 function loadDesign(){try{return loadWorkspace(localStorage);}catch{return createDemo('loft');}}
 const formatTime=(time)=>`${String(Math.floor(time)%12||12).padStart(2,'0')}:${String(Math.round((time%1)*60)).padStart(2,'0')} ${time>=12?'PM':'AM'}`;
-const timeName=t=>t<6?'Nightfall':t<10?'Morning light':t<16?'Afternoon':t<19?'Golden hour':'Evening glow';
+const timeName=t=>t<6||t>=20?'Moonlight':t<10?'Morning light':t<16?'Afternoon':t<19?'Golden hour':'Evening glow';
 const cn=(...parts)=>parts.filter(Boolean).join(' ');
 
 function Logo(){return <a className="brand" href="#" aria-label="Forma home" onClick={e=>e.preventDefault()}><svg width="31" height="35" viewBox="0 0 31 35" fill="none"><path d="M3 31V9L15 3l13 6v10l-13-6v18H3Z" fill="currentColor"/><path d="m16 15 12 5-12 7V15Z" fill="currentColor" opacity=".55"/></svg><span>forma<span className="brand-dot">.</span></span></a>;}
@@ -55,14 +56,31 @@ function WallDimensions({item,definition,onChange}){
   return <div className="wall-dimensions">{['Length','Height','Thickness'].map((label,index)=><label key={label}>{label}<span><input aria-label={`Wall ${label.toLowerCase()} in meters`} type="number" min={[.5,.4,.06][index]} max={[8,3.1,.4][index]} step={index===2?.01:.1} value={dimensions[index]} onChange={event=>{const value=+event.target.value;if(!Number.isFinite(value))return;onChange(dimensions.map((n,i)=>i===index?Math.max([.5,.4,.06][i],Math.min([8,3.1,.4][i],value)):n));}}/>m</span></label>)}</div>;
 }
 
+function TileColorPicker({value,onChange,onCheckpoint}){
+  const [draft,setDraft]=useState(value);useEffect(()=>setDraft(value),[value]);
+  const edit=color=>{setDraft(color);if(isTileColor(color))onChange(color);};
+  return <div className="color-field"><span>Custom tile color</span><span className="color-value"><input className="tile-hex" aria-label="Bathroom tile hex color" type="text" maxLength={7} spellCheck={false} value={draft} aria-invalid={!isTileColor(draft)} onFocus={onCheckpoint} onChange={e=>edit(e.target.value)}/><input type="color" aria-label="Custom bathroom tile color" value={value} onPointerDown={onCheckpoint} onInput={e=>edit(e.target.value)} onChange={e=>edit(e.target.value)}/></span></div>;
+}
+
+function ConfirmDesignDelete({design,onCancel,onConfirm}){
+  const cancelRef=useRef(null),confirmRef=useRef(null);
+  useEffect(()=>{const previous=document.activeElement;cancelRef.current?.focus();return()=>previous?.focus?.();},[]);
+  return <div className="modal-backdrop delete-backdrop" onClick={onCancel}><section className="delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-title" aria-describedby="delete-description" onClick={e=>e.stopPropagation()} onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();onCancel();}if(e.key==='Tab'){e.preventDefault();(document.activeElement===cancelRef.current?confirmRef:cancelRef).current?.focus();}}}>
+    <Trash2 size={26}/><h2 id="delete-title">Delete this design?</h2><p id="delete-description">“{design.name}” will be removed from this device. This cannot be undone. Export a design file first if you want to keep a copy.</p>
+    <div className="delete-modal-actions"><button ref={cancelRef} className="button" onClick={onCancel}>Keep design</button><button ref={confirmRef} className="button danger-button" onClick={onConfirm}>Delete design</button></div>
+  </section></div>;
+}
+
 function App(){
   const [design,setDesign]=useState(loadDesign),designRef=useRef(design);
   designRef.current=design;
   const [panel,setPanel]=useState('furniture'),[category,setCategory]=useState('all'),[search,setSearch]=useState(''),[favoritesOnly,setFavoritesOnly]=useState(false);
-  const [selectedId,setSelectedId]=useState(null),[view,setView]=useState('orbit'),[mode,setMode]=useState('navigate'),[grid,setGrid]=useState(false),[snap,setSnap]=useState(true),[walls,setWalls]=useState(true);
-  const selectItem=useCallback(uid=>{setSelectedId(uid);setMode(current=>uid?(current==='move'?'move':'select'):'navigate');},[]);
+  const [selection,setSelection]=useState({uid:null,focus:false}),selectedId=selection.uid;
+  const [view,setView]=useState('orbit'),[mode,setMode]=useState('navigate'),[grid,setGrid]=useState(false),[snap,setSnap]=useState(true),[walls,setWalls]=useState(true);
+  const selectItem=useCallback((uid,focus=true)=>{setSelection({uid,focus});setMode(current=>current==='move'?'move':uid?'select':'navigate');},[]);
   const [loading,setLoading]=useState(true),[renderError,setRenderError]=useState(''),[toast,setToast]=useState(''),[saveStatus,setSaveStatus]=useState('saved');
   const [rendererVersion,setRendererVersion]=useState(0);
+  const [deleteTarget,setDeleteTarget]=useState(null),[catalogDrag,setCatalogDrag]=useState(null),catalogDragRef=useRef(null);
   const [help,setHelp]=useState(false),[spaces,setSpaces]=useState(false),[exportOpen,setExportOpen]=useState(false),[lightOpen,setLightOpen]=useState(false),[intro,setIntro]=useState(!readStorage('forma-onboarded',false));
   const [past,setPast]=useState([]),[future,setFuture]=useState([]),[inspectorTab,setInspectorTab]=useState('appearance');
   const [lookState,setLookState]=useState('paused'),[spacesTab,setSpacesTab]=useState('saved');
@@ -73,7 +91,7 @@ function App(){
   initialGraphics.current=graphics;
   const [newLayout,setNewLayout]=useState('loft'),[newName,setNewName]=useState('');
   const [savedDesigns,setSavedDesigns]=useState(()=>{try{return readLibrary(localStorage).designs;}catch{return [];}});
-  const mountRef=useRef(null),engineRef=useRef(null),toastTimer=useRef(null),uploadRef=useRef(null),headerRef=useRef(null);
+  const mountRef=useRef(null),engineRef=useRef(null),toastTimer=useRef(null),uploadRef=useRef(null),headerRef=useRef(null),dragImageRef=useRef(null);
   const layout=LAYOUTS.find(l=>l.id===design.layoutId),selected=design.items.find(i=>i.uid===selectedId),selectedDef=selected&&CATALOG.find(i=>i.id===selected.catalogId);
   const appearanceParts=partOptions;
   const activePart=appearanceParts.find(p=>p.id===selectedPart)||appearanceParts[0];
@@ -105,7 +123,7 @@ function App(){
     let engine;
     try{
       engine=new DesignScene(mountRef.current,{
-        onSelect:selectItem,onMove:(uid,pos)=>updateItem(uid,pos,false),onDragStart:checkpoint,
+        onSelect:selectItem,onWalkNotice:notify,onMove:(uid,pos)=>updateItem(uid,pos,false),onDragStart:checkpoint,
         onRenderStatus:status=>{setLoading(false);setRenderError(status==='ready'?'':'Your device interrupted the 3D view. Your design is safe. Restore the view or choose lighter graphics settings.');},
         onPhysics:(uid,pos)=>{if(designRef.current.kind!=='demo'&&designRef.current.items.some(i=>i.uid===uid))updateItem(uid,pos,false);},onView:setView,onLookState:setLookState,onPartSelect:setSelectedPart,
       },initialGraphics.current);
@@ -113,10 +131,11 @@ function App(){
       return ()=>{engineRef.current=null;engine.dispose();clearTimeout(toastTimer.current);};
     }catch(e){engine?.dispose();engineRef.current=null;console.error(e);setRenderError('Your browser could not start the 3D renderer. Enable hardware acceleration, then restore the view to try again.');setLoading(false);}
   },[updateItem,checkpoint,selectItem,rendererVersion]);
-  useEffect(()=>{engineRef.current?.setDesign(design);setSaveStatus('saving');const timer=setTimeout(()=>{
+  useEffect(()=>{setSaveStatus('saving');const timer=setTimeout(()=>{
     try{setSavedDesigns(saveWorkspace(localStorage,design).designs);setSaveStatus('saved');}catch{setSaveStatus('failed');}
   },650);return()=>clearTimeout(timer);},[design]);
-  useEffect(()=>{engineRef.current?.select(selectedId);},[selectedId]);
+  useLayoutEffect(()=>{engineRef.current?.setDesign(design);engineRef.current?.select(selectedId,selection.focus);},[design,selection]);
+  useEffect(()=>{engineRef.current?.setInputBlocked(help||spaces||intro||!!deleteTarget);},[help,spaces,intro,deleteTarget,rendererVersion]);
   useEffect(()=>{if(selectedId&&!selected)selectItem(null);},[selectedId,selected,selectItem]);
   useEffect(()=>{setPartOptions(engineRef.current?.getAppearanceParts(selectedId)||[]);},[selectedId,design]);
   useEffect(()=>{engineRef.current?.setMode(mode);},[mode]);
@@ -131,25 +150,54 @@ function App(){
     const clone=makeItem(i.catalogId,x,z,i.rotation,i.y,{color:i.color,scale:i.scale,appearance:structuredClone(i.appearance||{}),...(i.dimensions?{dimensions:[...i.dimensions]}:{}),...(i.pattern?{pattern:i.pattern}:{})});change(d=>({...d,items:[...d.items,clone]}));selectItem(clone.uid);notify('A little more of a good thing. Item duplicated.');
   },[selectedId,change,notify]);
   useEffect(()=>{const handler=e=>{
-    if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable)return;
+    if(e.key==='Escape'){
+      if(deleteTarget){setDeleteTarget(null);return;}
+      if(help||spaces||intro){setHelp(false);setSpaces(false);setIntro(false);return;}
+      engineRef.current?.cancelCatalogDrag();catalogDragRef.current=null;setCatalogDrag(null);engineRef.current?.releaseMouse();selectItem(null);setExportOpen(false);setLightOpen(false);return;
+    }
+    if(/INPUT|TEXTAREA|SELECT/.test(e.target.tagName)||e.target.isContentEditable||deleteTarget||help||spaces||intro)return;
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();if(e.shiftKey)redo();else undo();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();duplicateSelected();}
     if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();removeSelected();}
     if(e.key.toLowerCase()==='r'&&selectedId)updateItem(selectedId,{rotation:(selected?.rotation||0)+Math.PI/12});
-    if(e.key==='Escape'){engineRef.current?.releaseMouse();selectItem(null);setHelp(false);setSpaces(false);setExportOpen(false);setLightOpen(false);}
-    if(e.key.toLowerCase()==='h')selectItem(null);if(e.key.toLowerCase()==='v')setMode('select');if(e.key.toLowerCase()==='m')setMode('move');
-  };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[undo,redo,duplicateSelected,removeSelected,selectedId,selected?.rotation,updateItem]);
+    if(e.key.toLowerCase()==='h'){selectItem(null);setMode('navigate');}if(e.key.toLowerCase()==='v')setMode('select');if(e.key.toLowerCase()==='m')setMode('move');
+  };window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);},[undo,redo,duplicateSelected,removeSelected,selectedId,selected?.rotation,updateItem,deleteTarget,help,spaces,intro]);
   useEffect(()=>{if(!exportOpen)return;const handler=e=>{if(!headerRef.current?.contains(e.target))setExportOpen(false);};document.addEventListener('pointerdown',handler);return()=>document.removeEventListener('pointerdown',handler);},[exportOpen]);
 
-  const addItem=def=>{
+  const addItem=(def,dropPosition)=>{
     if(design.items.length>=400){notify('This space has reached its 400-item limit.');return;}
-    const l=LAYOUTS.find(l=>l.id===design.layoutId),position=findPlacement(def,design);
+    const l=LAYOUTS.find(l=>l.id===design.layoutId),position=dropPosition||findPlacement(def,design);
     let x=position?.x||0,z=position?.z||0;
     // Wall pieces begin at a useful height against the rear wall.
-    if(def.wall){x=0;z=-l.depth/2+def.size[2]/2+.11;}
-    const item=makeItem(def.id,x,z,0,def.elevation??(def.ceiling?Math.max(.1,3.05-def.size[1]):def.wall?Math.max(.1,(3.1-def.size[1])/2):0));
-    change(d=>({...d,items:[...d.items,item]}));selectItem(item.uid);setMode('move');setInspectorTab('appearance');
+    if(def.wall&&!dropPosition){x=0;z=-l.depth/2+def.size[2]/2+.11;}
+    const item=makeItem(def.id,x,z,0,dropPosition?.y??itemElevation(def));
+    change(d=>({...d,items:[...d.items,item]}));selectItem(item.uid,!dropPosition);setMode('move');setInspectorTab('appearance');
     notify(`${def.name} added. Drag it to make it yours.`);
+  };
+  const endCatalogDrag=()=>{engineRef.current?.cancelCatalogDrag();catalogDragRef.current=null;setCatalogDrag(null);};
+  const startCatalogDrag=(event,def)=>{
+    if(renderError||loading){event.preventDefault();return;}
+    if(view==='walk'){engineRef.current?.releaseMouse();engineRef.current?.setView('orbit');setView('orbit');}
+    event.dataTransfer.effectAllowed='copy';event.dataTransfer.setData('application/x-forma-item',def.id);
+    // The scene supplies the 3D preview; suppress the browser's card snapshot.
+    event.dataTransfer.setDragImage(dragImageRef.current,0,0);
+    catalogDragRef.current=def;engineRef.current?.beginCatalogDrag(def);setCatalogDrag({name:def.name,valid:false});
+  };
+  const overCatalogDrop=event=>{
+    if(!catalogDragRef.current)return;event.preventDefault();const position=engineRef.current?.updateCatalogDrag(event.nativeEvent);
+    event.dataTransfer.dropEffect=position?.valid?'copy':'none';setCatalogDrag(current=>current?.valid===!!position?.valid?current:{name:catalogDragRef.current.name,valid:!!position?.valid});
+  };
+  const dropCatalogItem=event=>{
+    event.preventDefault();const def=catalogDragRef.current,position=engineRef.current?.updateCatalogDrag(event.nativeEvent);endCatalogDrag();
+    if(def&&position?.valid)addItem(def,position);else if(def)notify('Choose a clear place inside the flat to drop this piece.');
+  };
+  const confirmDelete=()=>{
+    if(!deleteTarget)return;
+    try{
+      const library=deleteSavedDesign(localStorage,deleteTarget.designId);setSavedDesigns(library.designs);
+      if(designRef.current.designId===deleteTarget.designId){const next=loadWorkspace(localStorage);designRef.current=next;setDesign(next);setPast([]);setFuture([]);selectItem(null);engineRef.current?.setView('orbit');setView('orbit');}
+      setDeleteTarget(null);notify('Design deleted from this device.');
+    }catch{notify('The design could not be deleted. Please try again.');}
   };
   const toggleFavorite=(e,id)=>{e.stopPropagation();change(d=>({...d,favoriteIds:d.favoriteIds.includes(id)?d.favoriteIds.filter(i=>i!==id):[...d.favoriteIds,id]}),false);};
   const filtered=useMemo(()=>CATALOG.filter(i=>(category==='all'||i.category===category)&&(category!=='hobbies'||!hobby||i.hobby===hobby)&&(!favoritesOnly||design.favoriteIds.includes(i.id))&&`${i.name} ${i.finish} ${i.category}`.toLowerCase().includes(search.toLowerCase())),[category,hobby,search,favoritesOnly,design.favoriteIds]);
@@ -172,15 +220,16 @@ function App(){
 
   const lightControls=(compact=false)=><div className={cn('light-controls',compact&&'compact')}>
     <div className="panel-eyebrow">SET THE MOOD</div><h3>A different kind of light.</h3><p>Watch the sunlight move, shadows stretch, and your space come to life.</p>
-    <div className="sun-preview"><div className="sun-arc"/><span className="sun-dot" style={{left:`${10+design.time/24*80}%`,bottom:`${18+Math.sin(design.time/24*Math.PI)*38}px`}}><Sun size={25}/></span><span className="horizon"/></div>
+    <div className="sun-preview"><div className="sun-arc"/><span className="sun-dot" style={{left:`${10+design.time/24*80}%`,bottom:`${18+Math.sin(design.time/24*Math.PI)*38}px`}}>{design.time<6||design.time>=18?<Moon size={25}/>:<Sun size={25}/>}</span><span className="horizon"/></div>
     <div className="time-heading"><span>{timeName(design.time)}</span><strong>{formatTime(design.time)}</strong></div>
     <input aria-label="Time of day" className="time-range" type="range" min="0" max="23.75" step=".25" value={design.time} onPointerDown={checkpoint} onChange={e=>change(d=>({...d,time:+e.target.value}),false)}/>
     <div className="range-labels"><span><Moon size={12}/> 12 AM</span><span>12 PM</span><span>12 AM</span></div>
     <div className="time-presets">{[{t:8,label:'Morning',icon:Sun},{t:13,label:'Daylight',icon:Sun},{t:17.5,label:'Golden',icon:Sunset},{t:21,label:'Evening',icon:Moon}].map(({t,label,icon:I})=><button key={t} className={Math.abs(design.time-t)<2?'active':''} onClick={()=>change(d=>({...d,time:t}))}><I size={17}/>{label}</button>)}</div>
-    <div className="note"><Sparkles size={16}/><span>Sunlight, shadows and material reflections update in real time.</span></div>
+    <div className="note"><Sparkles size={16}/><span>Switch the interior lights off to see sunlight or directional moonlight through the windows.</span></div>
   </div>;
 
   return <div className="app-shell">
+    <canvas ref={dragImageRef} className="catalog-native-drag-image" width={1} height={1} aria-hidden="true"/>
     <header className="app-header" ref={headerRef}>
       <Logo/>
       <div className="header-divider"/>
@@ -196,22 +245,24 @@ function App(){
         <div className="rail-bottom"><button className={cn('rail-button',favoritesOnly&&'active')} onClick={()=>{setFavoritesOnly(!favoritesOnly);setPanel('furniture');setCategory('all');}} title="Your favorites" aria-label="Show favorite items"><Heart size={21} fill={favoritesOnly?'currentColor':'none'}/><span>Favorites</span></button><div className="rail-separator"/><IconButton label="Help and keyboard shortcuts" onClick={()=>setHelp(true)}><CircleHelp size={21}/></IconButton><IconButton label="Graphics settings" active={panel==='settings'} onClick={()=>setPanel('settings')}><Settings2 size={21}/></IconButton><span className="version-label">v.02</span></div>
       </aside>
 
-      <main className="design-stage">
+      <main className={cn('design-stage',(design.time<6||design.time>=18)&&'night-stage')}>
         <div className="stage-heading"><div className="eyebrow">YOUR CANVAS, YOUR RULES</div><button className="layout-title" onClick={()=>openSpaces()}>{layout.name}<ChevronDown size={19}/></button><div className="layout-meta"><span>{layout.area} m²</span><span className="meta-dot"/><span>{layout.style}</span><span className="meta-dot"/><span className="free-tag">{design.kind==='demo'?'Demo home':'Your design'}</span></div></div>
-        <div className="stage-top-tools"><button className="lighting-chip" onClick={()=>setLightOpen(!lightOpen)} aria-expanded={lightOpen}>{design.time>19||design.time<6?<Moon size={16}/>:<Sun size={17}/>}<span>{formatTime(design.time)}</span><ChevronDown size={12}/></button><IconButton label="Expand studio fullscreen" className="stage-button" onClick={()=>{if(document.fullscreenElement)document.exitFullscreen?.();else document.documentElement.requestFullscreen?.().catch(()=>notify('Fullscreen is unavailable in this view.'));}}><Expand size={18}/></IconButton></div>
-        <div ref={mountRef} className="scene-canvas" role="application" aria-label="Interactive 3D apartment. Drag to orbit the view. Click an item to select it, then use Move to reposition it. Use the catalog to add items. Scroll to zoom. Use the view controls for a floor plan or walkthrough."/>
+        <div className="stage-top-tools"><button className="light-switch" role="switch" aria-checked={design.lightsOn!==false} aria-label="Light switch" onClick={()=>change(d=>({...d,lightsOn:d.lightsOn===false}))}><Lightbulb size={16}/><span>Light switch</span><strong>{design.lightsOn===false?'Off':'On'}</strong></button><button className="lighting-chip" onClick={()=>setLightOpen(!lightOpen)} aria-expanded={lightOpen}>{design.time>19||design.time<6?<Moon size={16}/>:<Sun size={17}/>}<span>{formatTime(design.time)}</span><ChevronDown size={12}/></button><IconButton label="Expand studio fullscreen" className="stage-button" onClick={()=>{if(document.fullscreenElement)document.exitFullscreen?.();else document.documentElement.requestFullscreen?.().catch(()=>notify('Fullscreen is unavailable in this view.'));}}><Expand size={18}/></IconButton></div>
+        <div ref={mountRef} onDragOver={overCatalogDrop} onDrop={dropCatalogItem} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget)){engineRef.current?.hideCatalogPreview();setCatalogDrag(current=>current?{...current,valid:false}:null);}}} className="scene-canvas" role="application" aria-label="Interactive 3D apartment. Drag to orbit the view. WASD pans the 3D view. Select an item to focus it; Escape restores your view. Use Move to reposition it. Drag catalog pieces into the flat, or click to add. Scroll to zoom. Use the view controls for a floor plan or walkthrough."/>
         {(loading||renderError)&&<div className={cn('scene-loading',renderError&&'render-interrupted')}>{loading?<><LoaderCircle className="spin" size={30}/><h3>Making room for you…</h3></>:<><Box size={30}/><h3>The 3D view needs a fresh start</h3><p>{renderError}</p><button className="button" onClick={()=>{selectItem(null);setView('orbit');setRenderError('');setLoading(true);setRendererVersion(value=>value+1);}}>Restore 3D view</button></>}</div>}
         {lightOpen&&<div className="lighting-popover popover"><IconButton className="popover-close" label="Close light controls" onClick={()=>setLightOpen(false)}><X size={16}/></IconButton>{lightControls(true)}</div>}
         {view==='walk'&&<>
           {['locked','soft'].includes(lookState)?<div className="walk-crosshair" aria-hidden="true"/>:<div className="walk-start"><Footprints size={21}/><strong>{lookState==='fallback'?'Explore at your own pace':'Step inside your space'}</strong><p>{lookState==='fallback'?'Move the mouse over the room to look around. W A S D to walk, Esc to pause. Touch players can drag to look.':'Click to look around with your mouse. W A S D to walk. Press Esc to free the cursor.'}</p><button className="button primary" onClick={()=>lookState==='fallback'?engineRef.current?.enableFallbackLook():engineRef.current?.captureMouse()}>{lookState==='fallback'?'Use mouse-look':'Start exploring'} <ArrowRight size={14}/></button></div>}
           <div className="walk-hud">{['locked','soft'].includes(lookState)?'Mouse to look · W A S D to walk · Shift to walk faster · Esc to release':'Walkthrough paused · click the room to continue'}</div>
         </>}
-        <div className={cn('canvas-tools',view==='walk'&&'walk-hidden')}><IconButton label="Navigate view (H)" active={mode==='navigate'} onClick={()=>selectItem(null)}><Hand size={18}/></IconButton><IconButton label="Select tool (V)" active={mode==='select'} onClick={()=>setMode('select')}><MousePointer2 size={18}/></IconButton><IconButton label="Move tool (M)" active={mode==='move'} onClick={()=>setMode('move')}><Move size={18}/></IconButton><span className="tool-divider"/><IconButton label={grid?'Hide placement grid':'Show placement grid'} active={grid} onClick={()=>setGrid(!grid)}><Grid2X2 size={18}/></IconButton><IconButton label={snap?'Turn off grid snapping':'Snap to 10 cm grid'} active={snap} onClick={()=>setSnap(!snap)}><Maximize size={18}/></IconButton><span className="tool-divider"/><IconButton label={walls?'Hide walls':'Show walls'} active={walls} onClick={()=>setWalls(!walls)}><Layers3 size={18}/></IconButton></div>
+        <div className={cn('canvas-tools',view==='walk'&&'walk-hidden')}><IconButton label="Navigate view (H)" active={mode==='navigate'} onClick={()=>{selectItem(null);setMode('navigate');}}><Hand size={18}/></IconButton><IconButton label="Select tool (V)" active={mode==='select'} onClick={()=>setMode('select')}><MousePointer2 size={18}/></IconButton><IconButton label="Move tool (M)" active={mode==='move'} onClick={()=>setMode('move')}><Move size={18}/></IconButton><span className="tool-divider"/><IconButton label={grid?'Hide placement grid':'Show placement grid'} active={grid} onClick={()=>setGrid(!grid)}><Grid2X2 size={18}/></IconButton><IconButton label={snap?'Turn off grid snapping':'Snap to 10 cm grid'} active={snap} onClick={()=>setSnap(!snap)}><Maximize size={18}/></IconButton><span className="tool-divider"/><IconButton label={walls?'Hide walls':'Show walls'} active={walls} onClick={()=>setWalls(!walls)}><Layers3 size={18}/></IconButton></div>
 
         {intro&&!selected&&<div className="welcome-card"><button className="close-welcome" aria-label="Dismiss welcome" onClick={dismissIntro}><X size={14}/></button><span className="welcome-icon"><Sparkles size={19}/></span><div><strong>A space of your own.</strong><p>A little rearranging. A lot of possibility.<br/>Pick a piece and make yourself at home.</p><button onClick={()=>{dismissIntro();setHelp(true);}}>A quick look around <ArrowRight size={13}/></button></div></div>}
 
-        {selected&&selectedDef&&<div className="inspector">
+        {catalogDrag&&<div className={cn('catalog-drop-hint',catalogDrag.valid&&'valid')} role="status">{catalogDrag.valid?'Release to place':'Drag to a clear place in the flat'} · {catalogDrag.name}</div>}
+        {selected&&selectedDef&&<div className="inspector" aria-label="Selected item inspector">
           <div className="inspector-header"><span className="selection-dot"/><div><strong>{selectedDef.name}</strong><span>{selectedDef.finish}</span></div><IconButton label="Deselect item" onClick={()=>selectItem(null)}><X size={15}/></IconButton></div>
+          <button className="focus-item" onClick={()=>engineRef.current?.focusSelection(true)}><Maximize size={13}/>Focus item <small>Esc returns to your view</small></button>
           <div className="inspector-tabs"><button className={inspectorTab==='appearance'?'active':''} onClick={()=>setInspectorTab('appearance')}>Appearance</button><button className={inspectorTab==='position'?'active':''} onClick={()=>setInspectorTab('position')}>Position</button></div>
           {inspectorTab==='appearance'?<>
             <label className="part-select">Customize part<select aria-label="Object part" value={activePart?.id||''} onChange={e=>setSelectedPart(e.target.value)}>{appearanceParts.map(p=><option key={p.id} value={p.id}>{p.label}</option>)}</select></label>
@@ -226,7 +277,7 @@ function App(){
 
         <div className="zoom-controls"><IconButton label="Zoom in" onClick={()=>engineRef.current?.zoom(1)}><Plus size={17}/></IconButton><span/><IconButton label="Zoom out" onClick={()=>engineRef.current?.zoom(-1)}><Minus size={17}/></IconButton><span/><IconButton label="Reset camera" onClick={()=>engineRef.current?.resetCamera()}><Maximize size={16}/></IconButton></div>
         <div className="stage-bottom"><div className="scene-status"><span className="live-dot"/><span>Live render</span><span className="status-dot">·</span><span>{design.items.length} objects</span></div><div className="view-switcher"><button className={view==='orbit'?'active':''} onClick={()=>selectView('orbit')}><Box size={15}/><span>3D view</span></button><button className={view==='top'?'active':''} onClick={()=>selectView('top')}><LayoutDashboard size={15}/><span>Floor plan</span></button><button className={view==='walk'?'active':''} onClick={()=>selectView('walk')}><Footprints size={15}/><span>Walkthrough</span></button></div><button className="help-shortcut" onClick={()=>setHelp(true)}><CircleHelp size={15}/><span>Controls</span></button></div>
-        <div className="canvas-caption">{view==='walk'?'Click room to capture mouse · Esc to release':mode==='move'?'Drag objects to move · click empty space to navigate':'Drag to orbit · scroll to zoom · click an object to select'}</div>
+        <div className="canvas-caption">{view==='walk'?'Click room to capture mouse · Esc to release':mode==='move'?'Drag objects to move · Move stays active when deselecting':'Drag to orbit · WASD to pan · scroll to zoom · Esc restores the view'}</div>
       </main>
 
       <aside className="catalog-panel">
@@ -237,13 +288,13 @@ function App(){
           <CategoryTabs categories={CATEGORIES} value={category} onChange={setCategory}/>
           {category==='hobbies'&&<label className="hobby-filter">Find your hobby<select aria-label="Hobby theme" value={hobby} onChange={e=>setHobby(e.target.value)}><option value="">All 20 hobbies</option>{HOBBIES.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>}
           <div className="catalog-section-title"><span>{search?`Results for “${search}”`:favoritesOnly?'Saved for later':category==='all'?'Curated essentials':CATEGORIES.find(c=>c.id===category).name}<small>{filtered.length} items</small></span><button aria-label={favoritesOnly?'Show all items':'Show favorites'} className={cn('filter-button',favoritesOnly&&'active')} onClick={()=>setFavoritesOnly(!favoritesOnly)}><Heart size={15} fill={favoritesOnly?'currentColor':'none'}/></button></div>
-          <div className="catalog-scroll"><div className="product-grid">{filtered.map(item=><div className="product-card" key={item.id}><button className="product-image" onClick={()=>addItem(item)} aria-label={`Add ${item.name} to your flat`}><CatalogThumbnail item={item}/>{item.tag&&<span className="product-tag">{item.tag}</span>}<span className="add-product"><Plus size={16}/></span></button><button className={cn('favorite-button',design.favoriteIds.includes(item.id)&&'is-favorite')} aria-label={`${design.favoriteIds.includes(item.id)?'Unfavorite':'Favorite'} ${item.name}`} onClick={e=>toggleFavorite(e,item.id)}><Heart size={13} fill={design.favoriteIds.includes(item.id)?'currentColor':'none'}/></button><button className="product-name" onClick={()=>addItem(item)}>{item.name}</button><span className="product-finish"><span style={{background:item.color}}/>{item.finish}</span></div>)}</div>{!filtered.length&&<div className="empty-catalog"><Search size={26}/><h3>A little more room to explore.</h3><p>{favoritesOnly?'Tap the heart on a piece to save it here.':'Try another name, material, or category.'}</p><button className="button" onClick={()=>{setSearch('');setCategory('all');setFavoritesOnly(false);}}>Explore all pieces</button></div>}</div>
-          <div className="catalog-footer"><MousePointer2 size={17}/><span>Click a piece to add it. Drag to find its place.</span></div>
-        </>:panel==='settings'?<GraphicsPanel settings={graphics} onChange={setGraphics}/>:panel==='materials'?<div className="settings-scroll"><p className="settings-intro">The colors and textures that make a house feel like home.</p><div className="setting-section"><div className="section-label"><h3>Wall color</h3><span>All walls</span></div><div className="wall-swatches">{WALL_COLORS.map(c=><button key={c.color} className={design.wallColor===c.color?'selected':''} onClick={()=>change(d=>({...d,wallColor:c.color}))}><span style={{background:c.color}}>{design.wallColor===c.color&&<Check size={17}/>}</span><small>{c.name}</small></button>)}</div><label className="color-field"><span>Your own shade</span><span className="color-value">{design.wallColor}<input type="color" aria-label="Custom wall color" value={design.wallColor} onChange={e=>change(d=>({...d,wallColor:e.target.value}))}/></span></label></div><div className="setting-section"><div className="section-label"><h3>Under your feet</h3><span>Floor material</span></div><div className="floor-grid">{FLOOR_TYPES.map(f=><button className={design.floor===f.id?'selected':''} key={f.id} onClick={()=>change(d=>({...d,floor:f.id}))}><span className={`floor-sample ${f.type}`} style={{backgroundColor:f.color}}>{design.floor===f.id&&<Check size={17}/>}</span><strong>{f.name}</strong></button>)}</div></div><div className="setting-section"><div className="section-label"><h3>Bathroom tiles</h3><span>Glazed ceramic</span></div><div className="tile-swatches">{[{id:'sage',c:'#99a88c'},{id:'cream',c:'#d7cbb3'},{id:'terracotta',c:'#b78268'},{id:'charcoal',c:'#676b63'}].map(t=><button key={t.id} aria-label={`${t.id} bathroom tiles`} title={t.id} className={cn('tile-sample',design.bathTile===t.id&&'selected')} style={{backgroundColor:t.c}} onClick={()=>change(d=>({...d,bathTile:t.id}))}>{design.bathTile===t.id&&<Check size={18}/>}</button>)}</div>{!layout.partitions&&<p className="field-note">Bathroom tiles appear in the Parkside Flat and Skyline Penthouse.</p>}</div><div className="note"><Paintbrush size={17}/><span>Select any object to give it its own color, rotation and size.</span></div></div>:panel==='lighting'?<div className="settings-scroll">{lightControls()}<div className="setting-section"><div className="section-label"><h3>A little atmosphere</h3></div><p className="field-note">Place table lights, floor lamps and pendants from the catalog. Warm ambient lighting fills your flat after sunset.</p><button className="text-link" onClick={()=>{setPanel('furniture');setCategory('lighting');setSearch('');setFavoritesOnly(false);}}>Explore the lighting collection <ArrowRight size={14}/></button></div></div>:<div className="settings-scroll"><p className="settings-intro">Four different canvases. One very good imagination. Keep the furnished demos, or start with an empty floor plan.</p><div className="layout-list">{LAYOUTS.map(l=><div key={l.id} className={cn('layout-card',l.id===design.layoutId&&'selected')}><div className="layout-plan-wrap"><Plan layout={l}/>{l.id===design.layoutId&&<span className="current-layout"><Check size={12}/>Your current space</span>}</div><div className="layout-card-bottom"><div><h3>{l.name}</h3><p>{l.area} m² <span>·</span> {l.rooms}</p></div>{l.id===design.layoutId?<span className="selected-circle"><Check size={15}/></span>:<ArrowRight size={19}/>}</div><div className="layout-card-actions"><button onClick={()=>selectLayout(l.id)}><Eye size={12}/>Open demo</button><button onClick={()=>openSpaces('new',l.id)}><Plus size={12}/>New design</button></div></div>)}</div></div>}
+          <div className="catalog-scroll"><div className="product-grid">{filtered.map(item=><div className="product-card" key={item.id}><button className="product-image" draggable onDragStart={e=>startCatalogDrag(e,item)} onDragEnd={endCatalogDrag} onClick={()=>addItem(item)} aria-label={`Add ${item.name} to your flat`}><CatalogThumbnail item={item}/>{item.tag&&<span className="product-tag">{item.tag}</span>}<span className="add-product"><Plus size={16}/></span></button><button className={cn('favorite-button',design.favoriteIds.includes(item.id)&&'is-favorite')} aria-label={`${design.favoriteIds.includes(item.id)?'Unfavorite':'Favorite'} ${item.name}`} onClick={e=>toggleFavorite(e,item.id)}><Heart size={13} fill={design.favoriteIds.includes(item.id)?'currentColor':'none'}/></button><button className="product-name" draggable onDragStart={e=>startCatalogDrag(e,item)} onDragEnd={endCatalogDrag} onClick={()=>addItem(item)}>{item.name}</button><span className="product-finish"><span style={{background:item.color}}/>{item.finish}</span></div>)}</div>{!filtered.length&&<div className="empty-catalog"><Search size={26}/><h3>A little more room to explore.</h3><p>{favoritesOnly?'Tap the heart on a piece to save it here.':'Try another name, material, or category.'}</p><button className="button" onClick={()=>{setSearch('');setCategory('all');setFavoritesOnly(false);}}>Explore all pieces</button></div>}</div>
+          <div className="catalog-footer"><MousePointer2 size={17}/><span>Drag a piece into your flat, or click to add it.</span></div>
+        </>:panel==='settings'?<GraphicsPanel settings={graphics} onChange={setGraphics}/>:panel==='materials'?<div className="settings-scroll"><p className="settings-intro">The colors and textures that make a house feel like home.</p><div className="setting-section"><div className="section-label"><h3>Wall color</h3><span>All walls</span></div><div className="wall-swatches">{WALL_COLORS.map(c=><button key={c.color} className={design.wallColor===c.color?'selected':''} onClick={()=>change(d=>({...d,wallColor:c.color}))}><span style={{background:c.color}}>{design.wallColor===c.color&&<Check size={17}/>}</span><small>{c.name}</small></button>)}</div><label className="color-field"><span>Your own shade</span><span className="color-value">{design.wallColor}<input type="color" aria-label="Custom wall color" value={design.wallColor} onChange={e=>change(d=>({...d,wallColor:e.target.value}))}/></span></label></div><div className="setting-section"><div className="section-label"><h3>Under your feet</h3><span>Floor material</span></div><div className="floor-grid">{FLOOR_TYPES.map(f=><button className={design.floor===f.id?'selected':''} key={f.id} onClick={()=>change(d=>({...d,floor:f.id}))}><span className={`floor-sample ${f.type}`} style={{backgroundColor:f.color}}>{design.floor===f.id&&<Check size={17}/>}</span><strong>{f.name}</strong></button>)}</div></div><div className="setting-section"><div className="section-label"><h3>Bathroom tiles</h3><span>Glazed ceramic</span></div><div className="tile-swatches">{BATH_TILES.map(t=><button key={t.id} aria-label={`${t.name} bathroom tiles`} title={t.name} className={cn('tile-sample',design.bathTile===t.id&&'selected')} style={{backgroundColor:t.color}} onClick={()=>change(d=>({...d,bathTile:t.id}))}>{design.bathTile===t.id&&<Check size={18}/>}</button>)}</div><TileColorPicker value={bathTileColor(design.bathTile)} onCheckpoint={checkpoint} onChange={color=>change(d=>d.bathTile===color?d:{...d,bathTile:color},false)}/>{!layout.partitions&&<p className="field-note">Bathroom tiles appear in the Parkside Flat and Skyline Penthouse.</p>}</div><div className="note"><Paintbrush size={17}/><span>Select any object to give it its own color, rotation and size.</span></div></div>:panel==='lighting'?<div className="settings-scroll">{lightControls()}<div className="setting-section"><div className="section-label"><h3>A little atmosphere</h3></div><p className="field-note">Place table lights, floor lamps and pendants from the catalog. The light switch controls installed ceiling lights and placed lamps, independently of the time of day.</p><button className="text-link" onClick={()=>{setPanel('furniture');setCategory('lighting');setSearch('');setFavoritesOnly(false);}}>Explore the lighting collection <ArrowRight size={14}/></button></div></div>:<div className="settings-scroll"><p className="settings-intro">Four different canvases. One very good imagination. Keep the furnished demos, or start with an empty floor plan.</p><div className="layout-list">{LAYOUTS.map(l=><div key={l.id} className={cn('layout-card',l.id===design.layoutId&&'selected')}><div className="layout-plan-wrap"><Plan layout={l}/>{l.id===design.layoutId&&<span className="current-layout"><Check size={12}/>Your current space</span>}</div><div className="layout-card-bottom"><div><h3>{l.name}</h3><p>{l.area} m² <span>·</span> {l.rooms}</p></div>{l.id===design.layoutId?<span className="selected-circle"><Check size={15}/></span>:<ArrowRight size={19}/>}</div><div className="layout-card-actions"><button onClick={()=>selectLayout(l.id)}><Eye size={12}/>Open demo</button><button onClick={()=>openSpaces('new',l.id)}><Plus size={12}/>New design</button></div></div>)}</div></div>}
       </aside>
     </div>
     {toast&&<div className="toast" role="status"><span><Check size={14}/></span>{toast}</div>}
-    {help&&<div className="modal-backdrop" onClick={()=>setHelp(false)}><section className="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={e=>e.stopPropagation()}><IconButton label="Close help" className="modal-close" onClick={()=>setHelp(false)}><X size={20}/></IconButton><span className="modal-symbol"><House size={27}/></span><span className="panel-eyebrow">WELCOME TO YOUR STUDIO</span><h2 id="help-title">Make yourself at home.</h2><p>There’s no right way to make a space your own.<br/>Here are a few things to get you started.</p><div className="help-grid">{[{icon:Armchair,title:'Find your pieces',text:`Explore ${CATALOG.length} pieces. Click one to add it, then drag it anywhere in your flat.`},{icon:Move,title:'A little rearranging',text:'Drag to orbit the view. Click a piece to select it; choose Move to drag it. Deselect to navigate again.'},{icon:Sun,title:'Chase the light',text:'Move the time slider from morning to night to see changing sunlight, reflections and shadows.'},{icon:Eye,title:'A new perspective',text:'Click Walkthrough for mouse-look controls. W A S D moves, mouse looks up and down, and Esc releases the cursor.'}].map(({icon:I,title,text})=><div key={title}><I size={22}/><h3>{title}</h3><p>{text}</p></div>)}</div><div className="shortcut-list"><span><kbd>H</kbd> Navigate</span><span><kbd>M</kbd> Move</span><span><kbd>R</kbd> Rotate</span><span><kbd>⌘ D</kbd> Duplicate</span><span><kbd>⌫</kbd> Remove</span><span><kbd>⌘ Z</kbd> Undo</span><span><kbd>Esc</kbd> Deselect</span></div><button className="button primary" onClick={()=>{setHelp(false);dismissIntro();}}>Let’s make room <ArrowRight size={16}/></button><span className="help-local">Your designs save automatically on this device. Export a file to keep a backup.</span></section></div>}
+    {help&&<div className="modal-backdrop" onClick={()=>setHelp(false)}><section className="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-title" onClick={e=>e.stopPropagation()}><IconButton label="Close help" className="modal-close" onClick={()=>setHelp(false)}><X size={20}/></IconButton><span className="modal-symbol"><House size={27}/></span><span className="panel-eyebrow">WELCOME TO YOUR STUDIO</span><h2 id="help-title">Make yourself at home.</h2><p>There’s no right way to make a space your own.<br/>Here are a few things to get you started.</p><div className="help-grid">{[{icon:Armchair,title:'Find your pieces',text:`Explore ${CATALOG.length} pieces. Drag one from the catalog into your flat, or click to add it.`},{icon:Move,title:'A little rearranging',text:'Drag to orbit the view. Click a piece to select it; choose Move to drag it. Move stays active on deselection. H returns to navigation; Esc restores the view from before selection.'},{icon:Sun,title:'Chase the light',text:'Move the time slider from morning to night to see changing sunlight, reflections and shadows.'},{icon:Eye,title:'A new perspective',text:'WASD pans the 3D view. Click Walkthrough for mouse-look controls. W A S D moves, mouse looks up and down, and Esc releases the cursor.'}].map(({icon:I,title,text})=><div key={title}><I size={22}/><h3>{title}</h3><p>{text}</p></div>)}</div><div className="shortcut-list"><span><kbd>H</kbd> Navigate</span><span><kbd>M</kbd> Move</span><span><kbd>R</kbd> Rotate</span><span><kbd>⌘ D</kbd> Duplicate</span><span><kbd>⌫</kbd> Remove</span><span><kbd>⌘ Z</kbd> Undo</span><span><kbd>Esc</kbd> Deselect</span></div><button className="button primary" onClick={()=>{setHelp(false);dismissIntro();}}>Let’s make room <ArrowRight size={16}/></button><span className="help-local">Your designs save automatically on this device. Export a file to keep a backup.</span></section></div>}
     {spaces&&<div className="modal-backdrop" onClick={()=>setSpaces(false)}><section className="spaces-modal" role="dialog" aria-modal="true" aria-labelledby="spaces-title" onClick={e=>e.stopPropagation()}>
       <IconButton label="Close spaces" className="modal-close" onClick={()=>setSpaces(false)}><X size={20}/></IconButton>
       <span className="panel-eyebrow">ROOM FOR YOUR IDEAS</span><h2 id="spaces-title">{spacesTab==='new'?'Start with a little possibility.':spacesTab==='demos'?'A little inspiration, always here.':'Your spaces, all together.'}</h2>
@@ -252,10 +303,10 @@ function App(){
         {[['saved',`Your designs (${savedDesigns.length})`],['demos','Demo homes'],['new','New design']].map(([id,label])=><button key={id} role="tab" aria-selected={spacesTab===id} onClick={()=>setSpacesTab(id)}>{id==='new'&&<Plus size={13}/>} {label}</button>)}
       </div>
       {spacesTab==='saved'?<>
-        {savedDesigns.length?<div className="spaces-grid saved-spaces-grid">{savedDesigns.map(saved=><button key={saved.designId} className={cn('space-card',saved.designId===design.designId&&'selected')} onClick={()=>activateDesign(saved)}>
+        {savedDesigns.length?<div className="spaces-grid saved-spaces-grid">{savedDesigns.map(saved=><div className="saved-space" key={saved.designId}><button className={cn('space-card',saved.designId===design.designId&&'selected')} onClick={()=>activateDesign(saved)}>
           <div className="space-plan"><Plan layout={LAYOUTS.find(l=>l.id===saved.layoutId)} large furnished={saved.items.length>0}/>{saved.designId===design.designId&&<span className="current-layout"><Check size={12}/>Currently designing</span>}</div>
           <div><span className="space-meta">{LAYOUTS.find(l=>l.id===saved.layoutId).name} · {saved.items.length} objects</span><h3>{saved.name}</h3><span className="space-cta">Continue designing <ArrowRight size={16}/></span></div>
-        </button>)}</div>:<div className="empty-spaces"><House size={31}/><h3>Your next favorite place starts here.</h3><p>Create an empty flat, or make a demo your own. Everything saves on this device.</p><button className="button primary" onClick={()=>setSpacesTab('new')}><Plus size={15}/>Create a new design</button><button className="text-link" onClick={()=>setSpacesTab('demos')}>Explore furnished demos <ArrowRight size={13}/></button></div>}
+        </button><button className="delete-design" aria-label={`Delete design ${saved.name}`} onClick={()=>setDeleteTarget(saved)}><Trash2 size={14}/>Delete</button></div>)}</div>:<div className="empty-spaces"><House size={31}/><h3>Your next favorite place starts here.</h3><p>Create an empty flat, or make a demo your own. Everything saves on this device.</p><button className="button primary" onClick={()=>setSpacesTab('new')}><Plus size={15}/>Create a new design</button><button className="text-link" onClick={()=>setSpacesTab('demos')}>Explore furnished demos <ArrowRight size={13}/></button></div>}
       </>:<>
         <div className="spaces-grid">{LAYOUTS.map(l=><button key={l.id} className={cn('space-card',spacesTab==='new'&&newLayout===l.id&&'selected')} aria-pressed={spacesTab==='new'?newLayout===l.id:undefined} onClick={()=>spacesTab==='new'?setNewLayout(l.id):selectLayout(l.id)}>
           <div className="space-plan"><Plan layout={l} large furnished={spacesTab==='demos'}/>{spacesTab==='new'&&newLayout===l.id&&<span className="current-layout"><Check size={12}/>Selected floor plan</span>}{spacesTab==='demos'&&<span className="current-layout">Furnished demo</span>}</div>
@@ -265,6 +316,7 @@ function App(){
       </>}
       <div className="spaces-note"><Check size={14}/>{spacesTab==='demos'?'Original demos stay furnished. Your edits become a separate personal design.':'New designs and existing homes save separately on this device.'}</div>
     </section></div>}
+    {deleteTarget&&<ConfirmDesignDelete design={deleteTarget} onCancel={()=>setDeleteTarget(null)} onConfirm={confirmDelete}/>}
   </div>;
 }
 

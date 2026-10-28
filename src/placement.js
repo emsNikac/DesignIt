@@ -1,6 +1,8 @@
 import {CATALOG,LAYOUTS} from './catalog.js';
 import {itemDefinition} from './architecture.js';
 
+export const itemElevation=def=>def.elevation??(def.ceiling?Math.max(.1,3.05-def.size[1]):def.wall?Math.max(.1,(3.1-def.size[1])/2):0);
+
 export function footprint(def,item={rotation:0,scale:1,x:0,z:0}){
   def=itemDefinition(def,item);
   const c=Math.abs(Math.cos(item.rotation||0)),s=Math.abs(Math.sin(item.rotation||0)),scale=item.scale||1;
