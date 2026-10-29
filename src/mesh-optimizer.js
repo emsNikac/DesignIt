@@ -38,4 +38,4 @@ export function batchModel(group){
   group.clear();group.add(...output);return group;
 }
 
-export function disposeOwnedGeometry(group){group.traverse(o=>{if(o.geometry&&(!o.geometry.userData.shared||geometryCache.peek(o.geometry.userData.cacheKey)!==o.geometry))o.geometry.dispose();if(o.userData.ownedMaterial){o.material.map?.dispose();o.material.dispose();}});}
+export function disposeOwnedGeometry(group){const disposed=new Set();group.traverse(o=>{if(o.geometry&&(!o.geometry.userData.shared||geometryCache.peek(o.geometry.userData.cacheKey)!==o.geometry))o.geometry.dispose();if(o.userData.ownedMaterial)for(const m of Array.isArray(o.material)?o.material:[o.material]){if(disposed.has(m))continue;disposed.add(m);if(!m.userData.sharedTextures)m.map?.dispose();m.dispose();}});}

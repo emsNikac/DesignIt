@@ -1,4 +1,5 @@
 import { DEFAULT_DESIGN, LAYOUTS, initialItems, makeItem, validateDesign } from './catalog.js';
+import {lockPlan,wallItemPosition} from './floor-plans.js';
 
 export const LIBRARY_KEY = 'forma-library-v2';
 const read = (storage, key) => { try { return JSON.parse(storage.getItem(key)); } catch { return null; } };
@@ -8,12 +9,16 @@ const layoutFor = id => { const layout = LAYOUTS.find(l => l.id === id); if (!la
 export function createDemo(layoutId) {
   const layout = layoutFor(layoutId);
   return { ...DEFAULT_DESIGN(), designId: `demo-${layoutId}`, kind: 'demo', name: layout.name,
-    layoutId, items: [...initialItems(layoutId), makeItem('art', -layout.width / 2 + .12, -layout.depth * .13, Math.PI / 2, 1.15)] };
+    layoutId, items: [...initialItems(layoutId), makeItem('art', ...(layout.plan?(()=>{const p=wallItemPosition(layout,{size:[.9,1.15,.06]});return [p?.x||0,p?.z||0,p?.rotation||0];})():[-layout.width / 2 + .12, -layout.depth * .13, Math.PI / 2]),1.15)] };
 }
 
 export function createBlankDesign(layoutId, name = '') {
   const layout = layoutFor(layoutId);
   return { ...DEFAULT_DESIGN(), designId: newId(), kind: 'design', name: name.trim().slice(0, 80) || `${layout.name} — my design`, layoutId, items: [] };
+}
+
+export function createCustomDesign(draft,name=''){
+  const floorPlan=lockPlan(draft);return {...DEFAULT_DESIGN(),designId:newId(),kind:'design',layoutId:'custom',floorPlan,name:name.trim().slice(0,80)||floorPlan.name,items:[],wallFinishes:{},zoneSurfaces:{}};
 }
 
 export function personalCopy(design) {
@@ -58,6 +63,7 @@ export function saveWorkspace(storage, design) {
   const library = readLibrary(storage);
   if (design.kind === 'design') {
     const index = library.designs.findIndex(d => d.designId === design.designId);
+    if(index>=0&&(library.designs[index].layoutId!==design.layoutId||JSON.stringify(library.designs[index].floorPlan)!==JSON.stringify(design.floorPlan)))throw new Error('This layout is locked. Copy its shape to create a new draft.');
     if (index < 0) library.designs.unshift(design); else library.designs[index] = design;
   }
   library.activeId = design.designId;

@@ -6,6 +6,10 @@ import {HOME_ITEMS} from './home-collection.js';
 import {DESIGN_ITEMS} from './design-collection.js';
 import {WALL_ITEMS,validWallDimensions} from './architecture.js';
 import {FLOOR_TYPES} from './floors.js';
+import {OUTDOOR_ITEMS} from './outdoor-collection.js';
+import {PREMADE_LAYOUTS} from './premade-plans.js';
+import {planLayout,validateLockedPlan} from './floor-plans.js';
+import {furnishPlan} from './premade-furnishing.js';
 export {FLOOR_TYPES} from './floors.js';
 
 export const CATEGORIES = [
@@ -16,6 +20,7 @@ export const CATEGORIES = [
   { id: 'bedroom', name: 'Bedroom' }, { id: 'bathroom', name: 'Bathroom' },
   { id: 'hobbies', name: 'Hobbies' },
   { id: 'architecture', name: 'Walls & dividers' },
+  { id: 'outdoor', name: 'Outdoor living' },
 ];
 
 const item = (id, name, category, model, color, size, extra = {}) => ({ id, name, category, model, color, size, ...extra });
@@ -76,6 +81,7 @@ export const CATALOG = [
   ...HOME_ITEMS,
   ...WALL_ITEMS,
   ...DESIGN_ITEMS,
+  ...OUTDOOR_ITEMS,
 ];
 
 export const SWATCHES = ['#7c8060', '#dfd3bd', '#e4dac9', '#ad674b', '#53595a', '#8d9a9d', '#bba38d', '#634832', '#d4c3a2', '#464b3d'];
@@ -90,7 +96,10 @@ export const LAYOUTS = [
   { id: 'studio', name: 'Little City Studio', subtitle: 'Good things, in a smaller space.', area: 42, rooms: '1 room', width: 7, depth: 6, style: 'Compact studio' },
   { id: 'apartment', name: 'The Parkside Flat', subtitle: 'A little room for every part of life.', area: 96, rooms: '3 rooms', width: 12, depth: 8, style: 'One-bedroom apartment', partitions: true },
   { id: 'penthouse', name: 'Skyline Penthouse', subtitle: 'More space. A different perspective.', area: 120, rooms: '3 rooms', width: 12, depth: 10, style: 'Generous penthouse', partitions: true },
+  ...PREMADE_LAYOUTS,
 ];
+
+export function getLayout(design){return design.floorPlan?planLayout(design.floorPlan):LAYOUTS.find(l=>l.id===design.layoutId);}
 
 let idCounter = 0;
 export const makeItem = (catalogId, x = 0, z = 0, rotation = 0, y = 0, extra = {}) => ({
@@ -99,6 +108,7 @@ export const makeItem = (catalogId, x = 0, z = 0, rotation = 0, y = 0, extra = {
 });
 
 export function initialItems(layoutId = 'loft') {
+  const generated=LAYOUTS.find(l=>l.id===layoutId);if(generated?.plan)return furnishPlan(generated,CATALOG,makeItem);
   if (layoutId === 'studio') return [
     makeItem('rug-cream', -.9, .25), makeItem('sofa-sand', -1.2, -.9),
     makeItem('table-oak', -1.15, .35), makeItem('plant-ficus', -2.75, -2.35),
@@ -154,7 +164,9 @@ export function initialItems(layoutId = 'loft') {
 export const DEFAULT_DESIGN = () => ({ version: 1, name: 'A space of my own', layoutId: 'loft', wallColor: '#e8e4d9', floor: 'oak', bathTile: 'sage', time: 15.5, lightsOn: true, items: initialItems(), favoriteIds: ['sofa-olive', 'chair-cream', 'table-oak', 'plant-ficus'] });
 
 export function validateDesign(value) {
-  if (!value || value.version !== 1 || !LAYOUTS.some(l => l.id === value.layoutId) || !Array.isArray(value.items) || value.items.length > 400) throw new Error('Please choose a valid Forma design file.');
+  if (!value || value.version !== 1 || !(LAYOUTS.some(l => l.id === value.layoutId)||(value.layoutId==='custom'&&value.floorPlan)) || !Array.isArray(value.items) || value.items.length > 400) throw new Error('Please choose a valid Forma design file.');
+  const floorPlan=value.floorPlan?validateLockedPlan(value.floorPlan):undefined;
+  if(floorPlan&&value.layoutId!=='custom')throw new Error('Custom floor plans must use their own layout.');
   const finite = n => typeof n === 'number' && Number.isFinite(n);
   const color = c => typeof c === 'string' && /^#[\da-f]{6}$/i.test(c);
   const ids = new Set();
@@ -167,5 +179,7 @@ export function validateDesign(value) {
   }
   if (!FLOOR_TYPES.some(f => f.id === value.floor) || !color(value.wallColor) || !finite(value.time) || value.time < 0 || value.time > 24) throw new Error('This design contains unsupported materials.');
   if(value.lightsOn!==undefined&&typeof value.lightsOn!=='boolean')throw new Error('Unsupported light switch state.');
-  return { ...value, lightsOn:value.lightsOn!==false, name: String(value.name || 'Untitled space').slice(0, 80), favoriteIds: Array.isArray(value.favoriteIds) ? value.favoriteIds.filter(id => CATALOG.some(c => c.id === id)) : [], bathTile: normalizeBathTile(value.bathTile) };
+  if(value.wallFinishes!==undefined){if(!value.wallFinishes||typeof value.wallFinishes!=='object'||Array.isArray(value.wallFinishes)||Object.keys(value.wallFinishes).length>400)throw new Error('Invalid wall finishes.');for(const finish of Object.values(value.wallFinishes))if(!finish||typeof finish!=='object'||Object.entries(finish).some(([k,v])=>!['a','b','finish'].includes(k)||(k==='finish'?!['paint','wood','tile','stone'].includes(v):!color(v))))throw new Error('Invalid wall finish.');}
+  if(value.zoneSurfaces!==undefined&&(!value.zoneSurfaces||typeof value.zoneSurfaces!=='object'||Array.isArray(value.zoneSurfaces)||Object.keys(value.zoneSurfaces).length>40||Object.values(value.zoneSurfaces).some(v=>!['grass','deck','pavers','gravel','asphalt'].includes(v))))throw new Error('Invalid outdoor surfaces.');
+  return { ...value,...(floorPlan?{floorPlan}:{}), lightsOn:value.lightsOn!==false, name: String(value.name || 'Untitled space').slice(0, 80), favoriteIds: Array.isArray(value.favoriteIds) ? value.favoriteIds.filter(id => CATALOG.some(c => c.id === id)) : [], bathTile: normalizeBathTile(value.bathTile) };
 }

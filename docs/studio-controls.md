@@ -2,7 +2,7 @@
 
 ## Selection and navigation
 
-Clicking a piece in 3D view or floor plan frames its bounds in the usable part of the canvas, beside the inspector and below the toolbar. The first focused selection stores the current camera position and orbit target. Switching between pieces retains that original pose. Escape, the inspector's close button, or an empty-space click restores it. The Focus item button frames the current piece again. Flat walls intersecting the focused sight lines temporarily cut away and return on deselection; their design and collision data do not change. A phone-sized inspector sits over the catalog below the stage.
+Clicking a piece in 3D view or floor plan frames its bounds in the usable part of the canvas, beside the inspector and below the toolbar. The first focused selection stores the current camera position and orbit target. Switching between pieces retains that original pose. Escape, the inspector's close button, or an empty-space click restores it. The Focus item button frames the current piece again. Exterior flat walls intersecting the focused sight lines temporarily cut away and return on deselection; their design and collision data do not change. A phone-sized inspector sits over the catalog below the stage.
 
 WASD translates the regular 3D camera and orbit target together on the horizontal plane. It does not rotate or move furniture. Orbit, right-drag pan and scroll zoom remain available. Typing in fields and opening library/help/confirmation dialogs suspend camera keyboard movement. Walkthrough keeps its existing mouse-look, WASD, Shift and arrow controls.
 
@@ -22,7 +22,7 @@ The saved Light switch controls built-in ceiling fixtures, up to eight placed la
 
 Two installed spotlights cast 512-pixel shadows at Medium shadow detail or above. Lower shadow presets disable these additional shadows. Other interior sources provide local illumination. This lighting approximates room illumination; it does not calculate astronomical positions, light bouncing between rooms, or ray-traced reflections. The switch and custom shades survive local saves and portable JSON files; older saves default to lights on.
 
-Bathroom tiles offer 24 named colors plus a picker and hex entry. The original sage, cream, terracotta and charcoal identifiers stay compatible. Tiles continue to apply to the two layouts with bathrooms.
+Bathroom tiles offer 24 named colors plus a picker and hex entry. The original sage, cream, terracotta and charcoal identifiers stay compatible. Tiles apply to the original divided layouts and every generated room marked as a bathroom.
 
 ## Design deletion
 
@@ -30,6 +30,10 @@ Each personal design in My spaces has a Delete action. The confirmation names th
 
 ## Validation
 
-The 74-test suite covers camera framing/restoration, temporary wall visibility, unchanged furniture during camera panning, persistent Move mode, obstructed entry across all four layouts, obstacle sliding, dense-floor escape, floor and worktop catalog drops, invalid/cancelled previews, actual light/emission switching, tile and switch persistence, and inactive/active/last-design deletion.
+The automated suite covers camera framing/restoration, temporary wall visibility, unchanged furniture during camera panning, persistent Move mode, obstructed entry across all ten layouts, obstacle sliding, dense-floor escape, floor and worktop catalog drops, invalid/cancelled previews, actual light/emission switching, tile and switch persistence, and inactive/active/last-design deletion.
 
 Browser checks measured zero camera position, rotation, target and field-of-view change after a native catalog drop, followed by focus on clicking that already-selected item and exact position restoration on Escape. They also exercised native catalog dragging to a chosen floor coordinate, off-floor rejection, selection/Escape restoration, WASD movement, a bed at the original walkthrough spawn, midnight with interior lights on/off, tile presets and custom hex entry, confirmation/cancellation, and persistence after reload. A 390 × 844 viewport check verified that the inspector stays below the canvas without horizontal page overflow and that camera focus avoids the mobile controls. No native-device performance benchmark was performed.
+
+## Floor plans and outdoor areas
+
+See the [floor-plan guide](floor-plans.md). New geometry checks cover shared-edge joins, contained rooms, disconnected/crossing/overlapping outlines, non-rectangular footprints, courtyard holes, physical floor support, doorway traversal, interior cutaway preservation, room-specific demo furnishing and local structural locks. Browser checks exercised drawing and closing dots, terrace attachment, fence and doorway selection, confirmation, individual wall paint and tile finish, persistence after reload, template copies, corner dragging, all six new demos, and the creator at 390 × 844. Interior walls remain visible when focusing furniture; the chosen exterior viewing side opens in orbit view and closes in walkthrough.

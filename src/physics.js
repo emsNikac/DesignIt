@@ -1,7 +1,9 @@
 import * as CANNON from 'cannon-es';
 import {itemDefinition,wallSections} from './architecture.js';
+import {floorTriangles,planGeometry,wallSectionsForPlan} from './floor-plans.js';
 
 export function createWorld(width, depth, partitions) {
+  const layout=typeof width==='object'?width:null;if(layout){width=layout.width;depth=layout.depth;partitions=layout.partitions;}
   const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.81, 0), allowSleep: true });
   world.broadphase = new CANNON.SAPBroadphase(world);
   world.defaultContactMaterial.friction = .65;
@@ -9,6 +11,16 @@ export function createWorld(width, depth, partitions) {
   const addBox = (w,h,d,x,y,z) => {
     const b = new CANNON.Body({ mass:0, shape:new CANNON.Box(new CANNON.Vec3(w/2,h/2,d/2)), position:new CANNON.Vec3(x,y,z) }); world.addBody(b);
   };
+  if(layout?.plan){
+    const floor=new CANNON.Body({mass:0});
+    for(const points of floorTriangles(layout.plan)){
+      const cx=points.reduce((s,p)=>s+p[0],0)/3,cz=points.reduce((s,p)=>s+p[1],0)/3;
+      const vertices=[...points.map(([x,z])=>new CANNON.Vec3(x-cx,-.1,z-cz)),...points.map(([x,z])=>new CANNON.Vec3(x-cx,.1,z-cz))];
+      floor.addShape(new CANNON.ConvexPolyhedron({vertices,faces:[[0,1,2],[3,5,4],[0,3,4,1],[1,4,5,2],[2,5,3,0]]}),new CANNON.Vec3(cx,-.1,cz));
+    }world.addBody(floor);
+    for(const segment of planGeometry(layout.plan).segments){const body=new CANNON.Body({mass:0});for(const s of wallSectionsForPlan(segment.style,segment.length)){body.addShape(new CANNON.Box(new CANNON.Vec3(s.width/2,s.height/2,s.depth/2)),new CANNON.Vec3(s.x,s.y,s.z));}if(body.shapes.length){body.position.set(segment.mid[0],0,segment.mid[1]);body.quaternion.setFromEuler(0,segment.rotation,0);world.addBody(body);}}
+    return world;
+  }
   addBox(width, .2, depth, 0, -.1, 0);
   addBox(width, 3.3, .14, 0, 1.65, -depth/2);
   addBox(width, 3.3, .14, 0, 1.65, depth/2);

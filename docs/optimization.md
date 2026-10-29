@@ -24,7 +24,7 @@ Measured on the unchanged furnished **Sunday Loft** demo, including its wall art
 
 That is a 77.2% reduction in furniture mesh submissions per pass. It is not a whole-frame draw-call count or an FPS claim: architecture, transparent objects, shadows and postprocessing also contribute work, and performance varies with device and viewpoint.
 
-Automated checks compare triangle counts and world bounds with batching enabled/disabled for all 629 catalog entries. They also cover independent countertop materials, saved appearance validation, geometry reuse, hobby coverage, graphics preferences, non-overlapping initial placement and the furnished loft reaching physics sleep. Browser checks verified visible customization, persistence after reload, graphics resolution changes, a clean console and a temporary idle render counter that stopped advancing (diagnostic instrumentation was removed afterward).
+Automated checks compare triangle counts and world bounds with batching enabled/disabled for all 709 catalog entries. They also cover independent countertop materials, saved appearance validation, geometry reuse, hobby coverage, graphics preferences, non-overlapping initial placement and the furnished loft reaching physics sleep. Browser checks verified visible customization, persistence after reload, graphics resolution changes, a clean console and a temporary idle render counter that stopped advancing (diagnostic instrumentation was removed afterward).
 
 Before/after screenshots were reviewed at Original quality. Geometry and materials retain the current look; batching can produce small edge and ambient-occlusion rasterization differences, so the result is not claimed to be pixel-identical. No native-device FPS or battery-life benchmark was performed.
 
@@ -45,3 +45,7 @@ The main canvas handles `webglcontextlost` with a visible recovery message. On r
 Validation includes 100 separate preview batches using one backend, isolated GPU-resource disposal, cancellation/error continuation, cache eviction, and browser scrolling through all nine main categories (108 scroll actions) with the scene remaining ready and no warnings or errors. A temporary local harness forced real WebGL loss/restoration and exercised the manual recovery control. No hardware-specific Brave GPU-driver crash was reproduced.
 
 References: [Three.js WebGLRenderer lifecycle](https://threejs.org/docs/pages/WebGLRenderer.html), [WebGL context-loss events](https://developer.mozilla.org/en-US/docs/Web/API/HTMLCanvasElement/webglcontextlost_event).
+
+## Floor-plan rendering
+
+Polygon unions, effective room surfaces and shared wall segments are cached per immutable plan. Contained rooms replace the surrounding floor surface, rather than adding overlapping meshes. Floor slabs and physics are triangulated from the actual outline, including holes. Outdoor surfaces reuse the bounded texture pool. Structural wall material copies are disposed when finishes or layouts change, while shared textures remain valid. The floor-plan editor uses a low-resolution, 30 FPS preview with contact shading disabled; closing it disposes the extra renderer and WebGL context. These changes do not reduce the original four layouts’ furniture or material detail.

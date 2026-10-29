@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.j
 import { buildCollectionModel } from './collection-models.js';
 import { buildHobbyModel } from './hobby-models.js';
 import { buildHomeModel } from './home-models.js';
+import {buildOutdoorModel} from './outdoor-models.js';
 import {buildDesignModel} from './design-models.js';
 import {drawDesignerRug} from './designer-rugs.js';
 import { drawFloorPattern } from './floors.js';
@@ -83,6 +84,7 @@ export function material(color, type = 'matte') {
   if(type==='leather'){opts.map=makeTexture('cloth',color);opts.color='#ffffff';opts.roughness=.45;opts.bumpMap=opts.map;opts.bumpScale=.006;}
   if(type==='terrazzo'){opts.map=makeTexture('terrazzo',color);opts.color='#ffffff';opts.roughness=.35;}
   if(type==='stone'){opts.roughness=.92;}
+  if(type==='grass'||type==='gravel'){opts.map=makeTexture(type,color);opts.color='#ffffff';opts.bumpMap=opts.map;opts.bumpScale=.025;opts.roughness=1;}
   if(type==='lacquer'){opts.roughness=.16;}
   if(type==='brushed'){opts.metalness=1;opts.roughness=.45;}
   if(type==='mirror'){opts.metalness=1;opts.roughness=.02;}
@@ -328,10 +330,10 @@ export function createModel(def, overrideColor, appearance={}, pattern, optimize
       for(const x of [-.28,.28]){tube(g,[x,0,-.12],[x,.9,-.12],.014,metal);tube(g,[x,0,.12],[x,.9,-.12],.012,metal);}tube(g,[-.28,.89,-.12],[.28,.89,-.12],.014,metal);
       box(g,.4,.53,.025,0,.6,-.1,material('#ddd2bb','cloth'),.01);for(let i=0;i<14;i++)box(g,.008,.5,.027,-.18+i*.028,.6,-.085,material('#e6ddc8','cloth'),.003);break;
     }
-    default:{const helpers={box,cyl,ball,tube,torus,legs,material,mesh,createModel:(nested,c)=>createModel(nested,c,appearance,undefined,false),part,color,appearance};if(!buildDesignModel(g,def,helpers)&&!buildCollectionModel(g,def,helpers)&&!buildHobbyModel(g,def,helpers)&&!buildHomeModel(g,def,helpers))throw new Error(`Unknown furniture model: ${def.model}`);}
+    default:{const helpers={box,cyl,ball,tube,torus,legs,material,mesh,createModel:(nested,c)=>createModel(nested,c,appearance,undefined,false),part,color,appearance};if(!buildOutdoorModel(g,def,helpers)&&!buildDesignModel(g,def,helpers)&&!buildCollectionModel(g,def,helpers)&&!buildHobbyModel(g,def,helpers)&&!buildHomeModel(g,def,helpers))throw new Error(`Unknown furniture model: ${def.model}`);}
   }
   const parts=collectParts(g,def);
-  const collisionBoxes=optimize&&def.model.startsWith('design-')&&!def.small&&!def.rug&&!def.ceiling&&(!def.wall||def.wallSupport)?captureCollisionBoxes(g):null;
+  const collisionBoxes=optimize&&(def.model.startsWith('design-')||def.outdoor)&&!def.small&&!def.rug&&!def.ceiling&&(!def.wall||def.wallSupport)?captureCollisionBoxes(g):null;
   if(optimize)batchModel(g);
   g.userData.appearanceParts=parts;
   if(def.fit){

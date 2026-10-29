@@ -1,6 +1,6 @@
 # Catalog coverage
 
-The catalog contains 629 items. This expansion adds 351 entries with different construction, silhouettes or motifs. Existing IDs and saved designs remain compatible. Hobbies and Walls & dividers retain their existing collections.
+The catalog contains 709 items. The indoor expansion added 351 entries with different construction, silhouettes or motifs; the floor-plan update adds 80 distinct outdoor pieces. Existing IDs and saved designs remain compatible. Hobbies and Walls & dividers retain their existing collections.
 
 | Category | Items |
 | --- | ---: |
@@ -15,6 +15,7 @@ The catalog contains 629 items. This expansion adds 351 entries with different c
 | Bathroom | 63 |
 | Hobbies | 60 |
 | Walls & dividers | 8 |
+| Outdoor living | 80 |
 
 Each of the nine main categories passes an automated minimum of **50 distinct constructions or rug motifs**. The check ignores palette, mesh ordering, position and uniform scale, so recoloring or uniformly enlarging a model cannot increase the count. Rug motifs are checked independently for different drawing operations. This is a regression guard; visual review is still necessary to assess design quality.
 
@@ -31,3 +32,9 @@ Each of the nine main categories passes an automated minimum of **50 distinct co
 - **Bathroom:** baths, washstands, toilets, shower enclosures, mirrors, towel storage, laundry pieces and spa accessories.
 
 New anchored furniture derives compound collision boxes from its rendered parts, including the fitting transform. This keeps shelves and work surfaces aligned with their visible height. Dining chairs have separate seat, leg and backrest colliders so they can tuck under a table. Curved surfaces are approximated by component bounds; this remains a design sandbox rather than a manufacturing or engineering simulator.
+
+## Outdoor living
+
+Eight families each contain ten different constructions: seating, shelters, boundaries, planting, ground surfaces, amenities, accents and leisure. Examples include an Adirondack chair, hammock, pergola, gazebo, greenhouse, glass railing, gate, rose trellis, vegetable bed, road segment, stepping stones, grill, pond, hot tub, festoon lights, sundial, sandpit, garden swing, tool shed and bicycle rack. Parts have independent colors and finishes.
+
+Outdoor anchored pieces derive component colliders from the fitted render. Walking can pass between pergola posts and under elevated roofs. Ground pieces act as surface overlays, without rigid-body obstacles. Curves and foliage retain approximate collision shapes.

@@ -23,6 +23,9 @@ export function floorTextureType(floor){return floor.type==='wood'?'floor':floor
 export function floorSurface(floor){return {roughness:floor.roughness??(floor.type==='wood'?.52:.68),bumpScale:floor.type==='carpet'?.025:.012};}
 
 export function drawFloorPattern(ctx,type,random){
+  if(type==='grass'){for(let i=0;i<6000;i++){const x=random()*512,y=random()*512;ctx.strokeStyle=random()>.5?'#c7cd7950':'#2f572b70';ctx.lineWidth=.5+random();ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+random()*5-2,y-3-random()*7);ctx.stroke();}return true;}
+  if(type==='gravel'){for(let i=0;i<1800;i++){ctx.fillStyle=['#8c8879','#d8ceaf','#a4a18e','#c5bb9e'][i%4];ctx.beginPath();ctx.ellipse(random()*512,random()*512,1+random()*4,1+random()*3,random()*6,0,Math.PI*2);ctx.fill();}return true;}
+  if(type==='asphalt'){for(let i=0;i<9000;i++){ctx.fillStyle=i%2?'#ffffff20':'#10191925';ctx.fillRect(random()*512,random()*512,1,1);}return true;}
   const plank=(x,y,width,height)=>{
     ctx.fillStyle=random()>.5?`rgba(255,241,209,${.04+random()*.13})`:`rgba(46,29,10,${.04+random()*.12})`;ctx.fillRect(x,y,width,height);
     ctx.strokeStyle='rgba(65,43,23,.22)';ctx.lineWidth=.8;ctx.strokeRect(x+.4,y+.4,width-.8,height-.8);
